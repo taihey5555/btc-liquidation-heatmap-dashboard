@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from app.exchanges.base import MarketSnapshot
 from app.models.schemas import Candle, HeatBand, HeatmapBucket, HeatmapResponse, NetPoint, ProfileRow
 from app.services.collector import collect_market_data
-from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights
+from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights, exchange_weight_warnings
 from app.services.liquidation_streams import get_recent_liquidations
 from app.services.mock_heatmap import FX_USD_JPY, build_mock_heatmap, build_profile, clamp
 
@@ -51,6 +51,8 @@ async def get_live_heatmap(symbol: str, model: int, currency: str, response_rang
     last_price = _weighted_price(snapshots)
     normalized_currency = currency.upper()
     display_price = f"${last_price:,.0f}" if normalized_currency == "USD" else f"¥{last_price * FX_USD_JPY:,.0f}"
+    exchange_weights = calculate_exchange_weights(snapshots)
+    warnings = [*collector_result.warnings, *exchange_weight_warnings(exchange_weights)]
     return HeatmapResponse(
         symbol=symbol.upper(),
         model=model,
@@ -60,7 +62,7 @@ async def get_live_heatmap(symbol: str, model: int, currency: str, response_rang
         fallback=False,
         exchanges_used=collector_result.exchanges_used,
         generated_at=int(datetime.now(UTC).timestamp()),
-        warnings=collector_result.warnings,
+        warnings=warnings,
         data_freshness_ms=collector_result.data_freshness_ms,
         display_price=display_price,
         last_price_usd=last_price,
@@ -70,7 +72,7 @@ async def get_live_heatmap(symbol: str, model: int, currency: str, response_rang
         profile=_buckets_to_profile(buckets),
         net=_build_live_net(candles),
         buckets=buckets,
-        exchange_weights=calculate_exchange_weights(snapshots),
+        exchange_weights=exchange_weights,
     )
 
 

@@ -15,10 +15,12 @@ LEVERAGE_DISTRIBUTION = (
     (100, 0.15),
 )
 LIQUIDATION_BUFFER = 0.004
+MAX_REASONABLE_BTCUSDT_OI_USD = 50_000_000_000
+MIN_REASONABLE_BTCUSDT_OI_USD = 10_000
 
 
 def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[ExchangeWeight]:
-    eligible = [snapshot for snapshot in snapshots if snapshot.open_interest_usd > 0]
+    eligible = [snapshot for snapshot in snapshots if is_reasonable_open_interest_usd(snapshot)]
     total_oi = sum(max(0.0, snapshot.open_interest_usd) for snapshot in eligible)
     if total_oi <= 0:
         mock_weights = {"binance": 0.34, "bybit": 0.26, "okx": 0.18, "gate": 0.12, "mexc": 0.10}
@@ -29,8 +31,8 @@ def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[Exchange
                 weight=mock_weights.get(snapshot.exchange, 0.0) / selected_total,
                 open_interest_usd=snapshot.open_interest_usd,
             )
-            for snapshot in snapshots
-        ]
+        for snapshot in snapshots
+    ]
     return [
         ExchangeWeight(
             exchange=snapshot.exchange,
@@ -40,6 +42,28 @@ def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[Exchange
         )
         for snapshot in eligible
     ]
+
+
+def is_reasonable_open_interest_usd(snapshot: MarketSnapshot) -> bool:
+    value = snapshot.open_interest_usd
+    if not math.isfinite(value):
+        return False
+    if value < MIN_REASONABLE_BTCUSDT_OI_USD or value > MAX_REASONABLE_BTCUSDT_OI_USD:
+        return False
+    if _is_finite_positive(snapshot.mark_price) and value < snapshot.mark_price * 0.01:
+        return False
+    return True
+
+
+def exchange_weight_warnings(weights: list[ExchangeWeight]) -> list[str]:
+    warnings: list[str] = []
+    total = sum(weight.weight for weight in weights)
+    if weights and abs(total - 1.0) > 0.001:
+        warnings.append(f"exchange weights sum to {total:.4f}, expected 1.0")
+    for weight in weights:
+        if weight.weight >= 0.85 and len(weights) > 1:
+            warnings.append(f"{weight.exchange} weight is unusually high at {weight.weight:.1%}; verify open_interest_usd unit")
+    return warnings
 
 
 def build_live_buckets(

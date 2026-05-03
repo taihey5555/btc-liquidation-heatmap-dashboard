@@ -5,8 +5,8 @@ from app.services.liquidation_models import build_live_buckets, calculate_exchan
 def test_exchange_weight_calculation_excludes_missing_oi() -> None:
     weights = calculate_exchange_weights(
         [
-            MarketSnapshot("binance", "BTCUSDT", 1, 82000, 82000, 1, 60, 0, 1, 82000, None, {}),
-            MarketSnapshot("okx", "BTC-USDT-SWAP", 1, 82000, 82000, 1, 40, 0, 1, 82000, None, {}),
+            MarketSnapshot("binance", "BTCUSDT", 1, 82000, 82000, 1, 600_000, 0, 1, 82000, None, {}),
+            MarketSnapshot("okx", "BTC-USDT-SWAP", 1, 82000, 82000, 1, 400_000, 0, 1, 82000, None, {}),
             MarketSnapshot("mexc", "BTC_USDT", 1, 82000, 82000, 1, 0, 0, 1, 82000, None, {}),
         ]
     )

@@ -4,7 +4,7 @@ import math
 from app.exchanges.base import MarketSnapshot
 from app.services.collector import CollectorResult
 from app.services.heatmap_service import get_heatmap
-from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights
+from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights, exchange_weight_warnings, is_reasonable_open_interest_usd
 
 
 def snapshot(exchange: str, oi_usd: float = 1_000_000, mark_price: float = 82000) -> MarketSnapshot:
@@ -74,3 +74,22 @@ def test_exchange_weight_fallback_renormalizes_selected_exchanges() -> None:
 
     assert round(sum(weight.weight for weight in weights), 8) == 1
     assert {weight.exchange for weight in weights} == {"binance", "okx"}
+
+
+def test_abnormal_open_interest_guard_excludes_extreme_values() -> None:
+    normal = snapshot("binance", oi_usd=1_000_000)
+    extreme = snapshot("mexc", oi_usd=900_000_000_000)
+
+    assert is_reasonable_open_interest_usd(normal) is True
+    assert is_reasonable_open_interest_usd(extreme) is False
+    weights = calculate_exchange_weights([normal, extreme])
+    assert len(weights) == 1
+    assert weights[0].exchange == "binance"
+    assert weights[0].weight == 1
+
+
+def test_exchange_weight_skew_warning() -> None:
+    warnings = exchange_weight_warnings(calculate_exchange_weights([snapshot("binance", oi_usd=90_000_000), snapshot("bybit", oi_usd=1_000_000)]))
+
+    assert warnings
+    assert "unusually high" in warnings[0]

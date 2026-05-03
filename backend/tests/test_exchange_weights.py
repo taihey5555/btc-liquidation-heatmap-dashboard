@@ -7,8 +7,8 @@ from app.services.liquidation_models import calculate_exchange_weights
 def test_exchange_weights_use_open_interest_usd_ratio() -> None:
     weights = calculate_exchange_weights(
         [
-            MarketSnapshot("binance", "BTCUSDT", 1, 82000, 82000, 100, 75, 0, 10, 82000, None, {}),
-            MarketSnapshot("bybit", "BTCUSDT", 1, 82000, 82000, 100, 25, 0, 10, 82000, None, {}),
+            MarketSnapshot("binance", "BTCUSDT", 1, 82000, 82000, 100, 750_000, 0, 10, 82000, None, {}),
+            MarketSnapshot("bybit", "BTCUSDT", 1, 82000, 82000, 100, 250_000, 0, 10, 82000, None, {}),
         ]
     )
 

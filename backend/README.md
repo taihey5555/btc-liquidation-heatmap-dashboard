@@ -54,3 +54,9 @@ This starts Binance `btcusdt@forceOrder` and Bybit `allLiquidation.BTCUSDT` publ
 ```bash
 pytest backend/tests
 ```
+
+## Operational Review Docs
+
+- `docs/MODELS.md`
+- `docs/EXCHANGE_DATA_NOTES.md`
+- `docs/KNOWN_LIMITATIONS.md`
