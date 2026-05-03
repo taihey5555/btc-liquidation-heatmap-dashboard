@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_database
-from app.routers import exchanges, heatmap, liquidations
+from app.routers import exchanges, heatmap, liquidations, observation
 
 settings = get_settings()
 
@@ -29,6 +29,7 @@ app.add_middleware(
 app.include_router(heatmap.router)
 app.include_router(exchanges.router)
 app.include_router(liquidations.router)
+app.include_router(observation.router)
 
 @app.get("/api/health")
 def health() -> dict[str, str]:

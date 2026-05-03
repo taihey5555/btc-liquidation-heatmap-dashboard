@@ -86,3 +86,51 @@ class LiquidationEvent(BaseModel):
     quantity: float
     notional_usd: float
     raw_json: dict | None = None
+
+
+class ObservationRun(BaseModel):
+    id: int
+    started_at: int
+    ended_at: int | None = None
+    symbol: str
+    interval_seconds: int
+    status: str
+    notes: str | None = None
+
+
+class ObservationClusterEvent(BaseModel):
+    id: int | None = None
+    run_id: int
+    ts: int
+    symbol: str
+    model: int
+    direction: str
+    price_min: float
+    price_max: float
+    estimated_liq_usd: float
+    score: float
+    confidence: float
+    exchanges_used: list[str]
+    message_hash: str
+
+
+class ObservationAnomaly(BaseModel):
+    id: int | None = None
+    run_id: int
+    ts: int
+    symbol: str
+    severity: str
+    anomaly_type: str
+    exchange: str | None = None
+    message: str
+    raw_json: dict = {}
+
+
+class ObservationReport(BaseModel):
+    id: int
+    run_id: int
+    created_at: int
+    period_start: int
+    period_end: int
+    report_json: dict
+    report_markdown: str

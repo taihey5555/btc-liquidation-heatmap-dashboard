@@ -49,6 +49,42 @@ export type ApiExchangeStatus = {
   websocket_last_error: string | null;
 };
 
+export type ApiObservationRun = {
+  id: number;
+  started_at: number;
+  ended_at: number | null;
+  symbol: string;
+  interval_seconds: number;
+  status: string;
+  notes: string | null;
+};
+
+export type ApiObservationReport = {
+  id: number;
+  run_id: number;
+  created_at: number;
+  period_start: number;
+  period_end: number;
+  report_json: {
+    snapshot_count?: number;
+    fallback_count?: number;
+    anomaly_count?: number;
+    top_clusters?: Array<{ direction: string; price_min: number; price_max: number; estimated_liq_usd: number }>;
+  };
+  report_markdown: string;
+};
+
+export type ApiObservationAnomaly = {
+  id: number | null;
+  run_id: number;
+  ts: number;
+  symbol: string;
+  severity: string;
+  anomaly_type: string;
+  exchange: string | null;
+  message: string;
+};
+
 export type HeatmapResponse = {
   symbol: string;
   model: number;
@@ -120,4 +156,31 @@ export async function fetchExchangeStatus(): Promise<ApiExchangeStatus[]> {
     throw new Error(`Exchange status API failed with ${response.status}`);
   }
   return response.json() as Promise<ApiExchangeStatus[]>;
+}
+
+export async function fetchObservationRuns(): Promise<ApiObservationRun[]> {
+  const response = await fetch(`${API_BASE_URL}/api/observation/runs`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Observation runs API failed with ${response.status}`);
+  }
+  return response.json() as Promise<ApiObservationRun[]>;
+}
+
+export async function fetchLatestObservationReport(): Promise<ApiObservationReport | null> {
+  const response = await fetch(`${API_BASE_URL}/api/observation/reports/latest`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Observation report API failed with ${response.status}`);
+  }
+  return response.json() as Promise<ApiObservationReport | null>;
+}
+
+export async function fetchObservationAnomalies(runId = "latest"): Promise<ApiObservationAnomaly[]> {
+  const response = await fetch(`${API_BASE_URL}/api/observation/anomalies?run_id=${runId}`, { cache: "no-store" });
+  if (!response.ok) {
+    if (response.status === 404) {
+      return [];
+    }
+    throw new Error(`Observation anomalies API failed with ${response.status}`);
+  }
+  return response.json() as Promise<ApiObservationAnomaly[]>;
 }

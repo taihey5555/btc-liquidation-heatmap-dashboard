@@ -4,9 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   fetchExchangeStatus,
   fetchHeatmap,
+  fetchLatestObservationReport,
+  fetchObservationAnomalies,
+  fetchObservationRuns,
   fetchRecentLiquidations,
   type ApiExchangeStatus,
   type ApiLiquidationEvent,
+  type ApiObservationAnomaly,
+  type ApiObservationReport,
+  type ApiObservationRun,
   type HeatmapResponse,
 } from "./lib/heatmapApi";
 
@@ -144,6 +150,9 @@ export default function Home() {
   const [recentLiquidations, setRecentLiquidations] = useState<ApiLiquidationEvent[]>([]);
   const [exchangeStatuses, setExchangeStatuses] = useState<ApiExchangeStatus[]>([]);
   const [enabledExchanges, setEnabledExchanges] = useState<string[]>(liveExchanges);
+  const [observationRun, setObservationRun] = useState<ApiObservationRun | null>(null);
+  const [observationReport, setObservationReport] = useState<ApiObservationReport | null>(null);
+  const [observationAnomalies, setObservationAnomalies] = useState<ApiObservationAnomaly[]>([]);
   const enabledExchangeKey = enabledExchanges.join(",");
   const mockCandles = useMemo(() => buildCandles(), []);
   const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
@@ -238,6 +247,33 @@ export default function Home() {
       window.clearInterval(refreshId);
     };
   }, [dataMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadObservation = () => {
+      Promise.all([fetchObservationRuns(), fetchLatestObservationReport(), fetchObservationAnomalies()])
+        .then(([runs, report, anomalies]) => {
+          if (!cancelled) {
+            setObservationRun(runs[0] ?? null);
+            setObservationReport(report);
+            setObservationAnomalies(anomalies);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setObservationRun(null);
+            setObservationReport(null);
+            setObservationAnomalies([]);
+          }
+        });
+    };
+    loadObservation();
+    const refreshId = window.setInterval(loadObservation, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshId);
+    };
+  }, []);
 
   return (
     <main className="terminal-shell">
@@ -413,6 +449,25 @@ export default function Home() {
                   </div>
                 ))
               )}
+            </div>
+          </aside>
+
+          <aside className="observation-panel">
+            <div className="observation-head">
+              <span>Observation</span>
+              <strong>{observationRun?.status ?? "idle"}</strong>
+            </div>
+            <div className="observation-grid">
+              <span>Fallbacks</span>
+              <strong>{observationReport?.report_json.fallback_count ?? 0}</strong>
+              <span>Anomalies</span>
+              <strong>{observationReport?.report_json.anomaly_count ?? observationAnomalies.length}</strong>
+              <span>Top Cluster</span>
+              <strong>
+                {observationReport?.report_json.top_clusters?.[0]
+                  ? `$${observationReport.report_json.top_clusters[0].estimated_liq_usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                  : "none"}
+              </strong>
             </div>
           </aside>
         </section>

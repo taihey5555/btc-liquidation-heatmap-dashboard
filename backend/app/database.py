@@ -57,6 +57,81 @@ CREATE TABLE IF NOT EXISTS exchange_status (
     websocket_last_error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS observation_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    symbol TEXT NOT NULL,
+    interval_seconds INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS observation_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    ts INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    model INTEGER NOT NULL,
+    current_price REAL NOT NULL,
+    source TEXT NOT NULL,
+    fallback INTEGER NOT NULL,
+    exchanges_used TEXT NOT NULL DEFAULT '[]',
+    total_open_interest_usd REAL NOT NULL,
+    max_cluster_usd REAL NOT NULL,
+    max_cluster_side TEXT,
+    max_cluster_price_min REAL,
+    max_cluster_price_max REAL,
+    max_score REAL NOT NULL,
+    max_confidence REAL NOT NULL,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY(run_id) REFERENCES observation_runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS observation_cluster_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    ts INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    model INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    price_min REAL NOT NULL,
+    price_max REAL NOT NULL,
+    estimated_liq_usd REAL NOT NULL,
+    score REAL NOT NULL,
+    confidence REAL NOT NULL,
+    exchanges_used TEXT NOT NULL DEFAULT '[]',
+    message_hash TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES observation_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_observation_cluster_hash
+ON observation_cluster_events(run_id, message_hash);
+
+CREATE TABLE IF NOT EXISTS observation_anomalies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    ts INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    anomaly_type TEXT NOT NULL,
+    exchange TEXT,
+    message TEXT NOT NULL,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY(run_id) REFERENCES observation_runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS observation_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    period_start INTEGER NOT NULL,
+    period_end INTEGER NOT NULL,
+    report_json TEXT NOT NULL,
+    report_markdown TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES observation_runs(id)
+);
 """
 
 
