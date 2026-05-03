@@ -6,8 +6,17 @@ import time
 from dataclasses import dataclass
 
 from app.database import get_connection
-from app.exchanges import binance, bybit
+from app.config import get_settings
+from app.exchanges import binance, bybit, gate, mexc, okx
 from app.exchanges.base import ExchangeStatus, LiveExchangeAdapter, MarketSnapshot
+
+ADAPTERS_BY_NAME: dict[str, LiveExchangeAdapter] = {
+    "binance": binance.adapter,
+    "bybit": bybit.adapter,
+    "okx": okx.adapter,
+    "gate": gate.adapter,
+    "mexc": mexc.adapter,
+}
 
 
 @dataclass(frozen=True)
@@ -30,8 +39,12 @@ class CollectorResult:
         return max(0, self.finished_at_ms - newest)
 
 
-async def collect_market_data(symbol: str, adapters: list[LiveExchangeAdapter] | None = None) -> CollectorResult:
-    selected_adapters = adapters or [binance.adapter, bybit.adapter]
+async def collect_market_data(
+    symbol: str,
+    adapters: list[LiveExchangeAdapter] | None = None,
+    exchange_names: list[str] | None = None,
+) -> CollectorResult:
+    selected_adapters = adapters or _select_adapters(exchange_names)
     started = int(time.time() * 1000)
     tasks = [_collect_one(adapter, symbol) for adapter in selected_adapters]
     results = await asyncio.gather(*tasks)
@@ -63,12 +76,41 @@ async def _collect_one(adapter: LiveExchangeAdapter, symbol: str) -> tuple[Marke
         snapshot = await adapter.get_market_snapshot(symbol)
     except Exception as exc:
         latency = int((time.perf_counter() - start) * 1000)
-        status = ExchangeStatus(exchange=adapter.name, enabled=True, last_error=str(exc), latency_ms=latency)
+        status = ExchangeStatus(exchange=adapter.name, enabled=True, last_error=str(exc), latency_ms=latency, data_fields_available=[])
         return None, status, f"{adapter.name}: {exc}"
 
     latency = int((time.perf_counter() - start) * 1000)
-    status = ExchangeStatus(exchange=adapter.name, enabled=True, last_success_ts=snapshot.ts, last_error=None, latency_ms=latency)
+    status = ExchangeStatus(
+        exchange=adapter.name,
+        enabled=True,
+        last_success_ts=snapshot.ts,
+        last_error=None,
+        latency_ms=latency,
+        data_fields_available=_snapshot_fields_available(snapshot),
+    )
     return snapshot, status, None
+
+
+def _select_adapters(exchange_names: list[str] | None) -> list[LiveExchangeAdapter]:
+    enabled = [name.lower() for name in (exchange_names or list(get_settings().enabled_exchanges))]
+    return [ADAPTERS_BY_NAME[name] for name in enabled if name in ADAPTERS_BY_NAME]
+
+
+def _snapshot_fields_available(snapshot: MarketSnapshot) -> list[str]:
+    fields: list[str] = []
+    if snapshot.mark_price > 0:
+        fields.append("mark_price")
+    if snapshot.index_price > 0:
+        fields.append("index_price")
+    if snapshot.open_interest > 0:
+        fields.append("open_interest")
+    if snapshot.open_interest_usd > 0:
+        fields.append("open_interest_usd")
+    if snapshot.funding_rate != 0:
+        fields.append("funding_rate")
+    if snapshot.volume_24h > 0:
+        fields.append("volume_24h")
+    return fields
 
 
 def _save_market_snapshot(snapshot: MarketSnapshot) -> None:
@@ -100,13 +142,14 @@ def _save_exchange_status(status: ExchangeStatus) -> None:
     with get_connection() as connection:
         connection.execute(
             """
-            INSERT INTO exchange_status (exchange, enabled, last_success_ts, last_error, latency_ms)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO exchange_status (exchange, enabled, last_success_ts, last_error, latency_ms, data_fields_available)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(exchange) DO UPDATE SET
                 enabled = excluded.enabled,
                 last_success_ts = COALESCE(excluded.last_success_ts, exchange_status.last_success_ts),
                 last_error = excluded.last_error,
-                latency_ms = excluded.latency_ms
+                latency_ms = excluded.latency_ms,
+                data_fields_available = excluded.data_fields_available
             """,
             (
                 status.exchange,
@@ -114,6 +157,7 @@ def _save_exchange_status(status: ExchangeStatus) -> None:
                 status.last_success_ts,
                 status.last_error,
                 status.latency_ms,
+                json.dumps(status.data_fields_available, separators=(",", ":")),
             ),
         )
         connection.commit()

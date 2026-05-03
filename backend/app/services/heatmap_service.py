@@ -10,15 +10,22 @@ from app.services.liquidation_streams import get_recent_liquidations
 from app.services.mock_heatmap import FX_USD_JPY, build_mock_heatmap, build_profile, clamp
 
 
-async def get_heatmap(symbol: str, model: int, currency: str, response_range: str, source: str = "mock") -> HeatmapResponse:
+async def get_heatmap(
+    symbol: str,
+    model: int,
+    currency: str,
+    response_range: str,
+    source: str = "mock",
+    exchanges: list[str] | None = None,
+) -> HeatmapResponse:
     normalized_source = source.lower()
     if normalized_source == "mock":
         return build_mock_heatmap(symbol=symbol, model=model, currency=currency, response_range=response_range)
-    return await get_live_heatmap(symbol=symbol, model=model, currency=currency, response_range=response_range)
+    return await get_live_heatmap(symbol=symbol, model=model, currency=currency, response_range=response_range, exchanges=exchanges)
 
 
-async def get_live_heatmap(symbol: str, model: int, currency: str, response_range: str) -> HeatmapResponse:
-    collector_result = await collect_market_data(symbol)
+async def get_live_heatmap(symbol: str, model: int, currency: str, response_range: str, exchanges: list[str] | None = None) -> HeatmapResponse:
+    collector_result = await collect_market_data(symbol, exchange_names=exchanges)
     if not collector_result.snapshots:
         fallback = build_mock_heatmap(symbol=symbol, model=model, currency=currency, response_range=response_range)
         fallback.source = "mock"

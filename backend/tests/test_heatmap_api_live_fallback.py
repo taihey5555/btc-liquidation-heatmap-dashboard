@@ -5,7 +5,7 @@ from app.services.heatmap_service import get_heatmap
 
 
 def test_heatmap_api_live_fallback(monkeypatch) -> None:
-    async def fake_collect(symbol: str):
+    async def fake_collect(symbol: str, **kwargs):
         return CollectorResult(
             snapshots=[],
             statuses=[],

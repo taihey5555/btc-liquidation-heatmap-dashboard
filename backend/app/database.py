@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS exchange_status (
     last_success_ts INTEGER,
     last_error TEXT,
     latency_ms INTEGER,
+    data_fields_available TEXT NOT NULL DEFAULT '[]',
     websocket_connected INTEGER NOT NULL DEFAULT 0,
     websocket_last_message_ts INTEGER,
     websocket_last_error TEXT
@@ -73,6 +74,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
     _ensure_column(connection, "exchange_status", "websocket_connected", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(connection, "exchange_status", "websocket_last_message_ts", "INTEGER")
     _ensure_column(connection, "exchange_status", "websocket_last_error", "TEXT")
+    _ensure_column(connection, "exchange_status", "data_fields_available", "TEXT NOT NULL DEFAULT '[]'")
     connection.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidation_events_hash

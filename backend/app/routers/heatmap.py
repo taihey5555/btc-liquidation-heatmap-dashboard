@@ -13,5 +13,7 @@ async def read_heatmap(
     currency: str = Query(default="USD", pattern="^(USD|JPY|usd|jpy)$"),
     range: str = Query(default="90d"),
     source: str = Query(default="mock", pattern="^(mock|live)$"),
+    exchanges: str | None = Query(default=None),
 ) -> HeatmapResponse:
-    return await get_heatmap(symbol=symbol, model=model, currency=currency, response_range=range, source=source)
+    exchange_names = [exchange.strip().lower() for exchange in exchanges.split(",") if exchange.strip()] if exchanges else None
+    return await get_heatmap(symbol=symbol, model=model, currency=currency, response_range=range, source=source, exchanges=exchange_names)

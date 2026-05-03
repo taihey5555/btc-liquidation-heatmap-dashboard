@@ -163,6 +163,36 @@ h1 {
   font-size: 15px;
 }
 
+.exchange-filter {
+  min-width: 1440px;
+  display: flex;
+  gap: 8px;
+  margin: -5px 0 12px;
+}
+
+.exchange-filter button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #223247;
+  border-radius: 4px;
+  color: #8895a6;
+  background: #071019;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-filter button.enabled {
+  color: #061015;
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.exchange-filter button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
 .dashboard-scroll {
   overflow-x: auto;
   padding-bottom: 8px;

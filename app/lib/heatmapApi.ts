@@ -78,6 +78,7 @@ export async function fetchHeatmap(params: {
   currency: "USD" | "JPY";
   range: string;
   source: "mock" | "live";
+  exchanges?: string[];
 }): Promise<HeatmapResponse> {
   const searchParams = new URLSearchParams({
     symbol: params.symbol,
@@ -86,6 +87,9 @@ export async function fetchHeatmap(params: {
     range: params.range.toLowerCase(),
     source: params.source,
   });
+  if (params.exchanges && params.exchanges.length > 0) {
+    searchParams.set("exchanges", params.exchanges.join(","));
+  }
   const response = await fetch(`${API_BASE_URL}/api/heatmap?${searchParams.toString()}`, {
     cache: "no-store",
   });

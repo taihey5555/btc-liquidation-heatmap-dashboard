@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 
 from app.database import get_connection, init_database
-from app.exchanges import binance, bybit, gate, mexc, okx
+import json
+
 from app.models.schemas import ExchangeStatus
 
 router = APIRouter(prefix="/api/exchanges", tags=["exchanges"])
@@ -13,14 +14,14 @@ def read_exchange_status() -> list[ExchangeStatus]:
     statuses = {
         "binance": ExchangeStatus(exchange="binance", enabled=True),
         "bybit": ExchangeStatus(exchange="bybit", enabled=True),
-        "okx": ExchangeStatus(**okx.adapter.status()),
-        "gate": ExchangeStatus(**gate.adapter.status()),
-        "mexc": ExchangeStatus(**mexc.adapter.status()),
+        "okx": ExchangeStatus(exchange="okx", enabled=True),
+        "gate": ExchangeStatus(exchange="gate", enabled=True),
+        "mexc": ExchangeStatus(exchange="mexc", enabled=True),
     }
     with get_connection() as connection:
         rows = connection.execute(
             """
-            SELECT exchange, enabled, last_success_ts, last_error, latency_ms,
+            SELECT exchange, enabled, last_success_ts, last_error, latency_ms, data_fields_available,
                    websocket_connected, websocket_last_message_ts, websocket_last_error
             FROM exchange_status
             """
@@ -35,5 +36,6 @@ def read_exchange_status() -> list[ExchangeStatus]:
             websocket_connected=bool(row["websocket_connected"]),
             websocket_last_message_ts=row["websocket_last_message_ts"],
             websocket_last_error=row["websocket_last_error"],
+            data_fields_available=json.loads(row["data_fields_available"] or "[]"),
         )
     return [statuses[name] for name in ("binance", "bybit", "okx", "gate", "mexc")]

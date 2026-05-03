@@ -74,6 +74,7 @@ class ExchangeStatus(BaseModel):
     websocket_connected: bool = False
     websocket_last_message_ts: int | None = None
     websocket_last_error: str | None = None
+    data_fields_available: list[str] = []
 
 
 class LiquidationEvent(BaseModel):

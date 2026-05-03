@@ -89,6 +89,7 @@ class ExchangeStatus:
     websocket_connected: bool = False
     websocket_last_message_ts: int | None = None
     websocket_last_error: str | None = None
+    data_fields_available: list[str] = field(default_factory=list)
 
 
 class LiveExchangeAdapter(Protocol):
@@ -131,6 +132,7 @@ class ExchangeAdapter:
             "websocket_connected": False,
             "websocket_last_message_ts": None,
             "websocket_last_error": None,
+            "data_fields_available": [],
         }
 
 

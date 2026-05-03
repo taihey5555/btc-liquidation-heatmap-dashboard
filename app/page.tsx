@@ -32,6 +32,7 @@ type ProfileRow = {
 };
 
 type DataMode = "mock" | "live";
+const liveExchanges = ["binance", "bybit", "okx", "gate", "mexc"];
 
 const priceMin = 75000;
 const priceMax = 81950;
@@ -142,6 +143,7 @@ export default function Home() {
   const [apiStatus, setApiStatus] = useState<"idle" | "ready" | "fallback">("idle");
   const [recentLiquidations, setRecentLiquidations] = useState<ApiLiquidationEvent[]>([]);
   const [exchangeStatuses, setExchangeStatuses] = useState<ApiExchangeStatus[]>([]);
+  const [enabledExchanges, setEnabledExchanges] = useState<string[]>(liveExchanges);
   const mockCandles = useMemo(() => buildCandles(), []);
   const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
   const mockProfile = useMemo(() => buildProfile(), []);
@@ -166,6 +168,14 @@ export default function Home() {
         .map((weight) => `${weight.exchange} ${(weight.weight * 100).toFixed(0)}%`)
         .join(" / ")
     : "mock blend";
+  const toggleExchange = (exchange: string) => {
+    setEnabledExchanges((current) => {
+      if (current.includes(exchange)) {
+        return current.length === 1 ? current : current.filter((item) => item !== exchange);
+      }
+      return [...current, exchange];
+    });
+  };
 
   useEffect(() => {
     if (dataMode !== "live") {
@@ -175,7 +185,7 @@ export default function Home() {
     let cancelled = false;
 
     const loadLiveHeatmap = () => {
-      fetchHeatmap({ symbol: "BTCUSDT", model, currency, range, source: "live" })
+      fetchHeatmap({ symbol: "BTCUSDT", model, currency, range, source: "live", exchanges: enabledExchanges })
         .then((response) => {
           if (!cancelled) {
             setApiData(response);
@@ -197,7 +207,7 @@ export default function Home() {
       cancelled = true;
       window.clearInterval(refreshId);
     };
-  }, [currency, dataMode, model, range]);
+  }, [currency, dataMode, enabledExchanges, model, range]);
 
   useEffect(() => {
     if (dataMode !== "live") {
@@ -269,6 +279,20 @@ export default function Home() {
           <span>Exchange Weights</span>
           <strong>{exchangeWeights}</strong>
         </div>
+      </section>
+
+      <section className="exchange-filter">
+        {liveExchanges.map((exchange) => (
+          <button
+            key={exchange}
+            type="button"
+            className={enabledExchanges.includes(exchange) ? "enabled" : ""}
+            onClick={() => toggleExchange(exchange)}
+            disabled={dataMode !== "live"}
+          >
+            {exchange.toUpperCase()}
+          </button>
+        ))}
       </section>
 
       <div className="dashboard-scroll">
