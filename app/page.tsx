@@ -24,7 +24,7 @@ type ProfileRow = {
   short: number;
 };
 
-type DataMode = "mock" | "api";
+type DataMode = "mock" | "live";
 
 const priceMin = 75000;
 const priceMax = 81950;
@@ -136,7 +136,7 @@ export default function Home() {
   const mockCandles = useMemo(() => buildCandles(), []);
   const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
   const mockProfile = useMemo(() => buildProfile(), []);
-  const useApiData = dataMode === "api" && apiData !== null && apiStatus === "ready";
+  const useApiData = dataMode === "live" && apiData !== null && apiStatus === "ready";
   const candles = useApiData ? apiData.candles : mockCandles;
   const heatBands = useMemo(() => {
     const sourceBands = useApiData ? apiData.heat_bands : mockHeatBands;
@@ -150,31 +150,43 @@ export default function Home() {
     : currency === "USD"
       ? `$${last.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
       : `¥${Math.round(last * fx).toLocaleString("ja-JP")}`;
-  const dataStatusLabel = dataMode === "mock" ? "mock" : apiStatus === "ready" ? "api" : "mock fallback";
+  const dataStatusLabel = dataMode === "mock" ? "mock" : apiStatus === "ready" ? (apiData?.fallback ? "fallback mock" : "live") : "mock fallback";
+  const exchangeWeights = useApiData
+    ? apiData.exchange_weights
+        .filter((weight) => weight.enabled)
+        .map((weight) => `${weight.exchange} ${(weight.weight * 100).toFixed(0)}%`)
+        .join(" / ")
+    : "mock blend";
 
   useEffect(() => {
-    if (dataMode !== "api") {
+    if (dataMode !== "live") {
       return;
     }
 
     let cancelled = false;
 
-    fetchHeatmap({ symbol: "BTCUSDT", model, currency, range })
-      .then((response) => {
-        if (!cancelled) {
-          setApiData(response);
-          setApiStatus("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setApiData(null);
-          setApiStatus("fallback");
-        }
-      });
+    const loadLiveHeatmap = () => {
+      fetchHeatmap({ symbol: "BTCUSDT", model, currency, range, source: "live" })
+        .then((response) => {
+          if (!cancelled) {
+            setApiData(response);
+            setApiStatus("ready");
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setApiData(null);
+            setApiStatus("fallback");
+          }
+        });
+    };
+
+    loadLiveHeatmap();
+    const refreshId = window.setInterval(loadLiveHeatmap, 10000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(refreshId);
     };
   }, [currency, dataMode, model, range]);
 
@@ -182,11 +194,11 @@ export default function Home() {
     <main className="terminal-shell">
       <header className="topbar">
         <div className="title-block">
-          <p className="eyebrow">BTCUSDT perpetual / <span className={`data-status ${dataStatusLabel.includes("api") ? "api" : "mock"}`}>{dataStatusLabel}</span></p>
+          <p className="eyebrow">BTCUSDT perpetual / <span className={`data-status ${dataStatusLabel === "live" ? "api" : "mock"}`}>{dataStatusLabel}</span></p>
           <h1>Liquidation Heatmap Dashboard</h1>
         </div>
         <div className="toolbar">
-          <Segmented label="Source" value={dataMode.toUpperCase()} items={["MOCK", "API"]} onSelect={(value) => setDataMode(value.toLowerCase() as DataMode)} />
+          <Segmented label="Source" value={dataMode.toUpperCase()} items={["MOCK", "LIVE"]} onSelect={(value) => setDataMode(value.toLowerCase() as DataMode)} />
           <Segmented label="Model" value={`Model ${model}`} items={["Model 1", "Model 2", "Model 3"]} onSelect={(value) => setModel(Number(value.slice(-1)))} />
           <Segmented label="Range" value={range} items={["24H", "7D", "30D", "90D"]} onSelect={setRange} />
           <Segmented label="Currency" value={currency} items={["USD", "JPY"]} onSelect={(value) => setCurrency(value as "USD" | "JPY")} />
@@ -214,6 +226,10 @@ export default function Home() {
         <div>
           <span>Range</span>
           <strong>{range}</strong>
+        </div>
+        <div>
+          <span>Exchange Weights</span>
+          <strong>{exchangeWeights}</strong>
         </div>
       </section>
 

@@ -19,7 +19,7 @@ def test_heatmap_response_shape() -> None:
     assert data["symbol"] == "BTCUSDT"
     assert data["model"] == 2
     assert data["currency"] == "JPY"
-    assert data["source"] == "api-mock"
+    assert data["source"] == "mock"
     assert data["display_price"].startswith("¥")
     assert len(data["candles"]) == 245
     assert len(data["heat_bands"]) > 0

@@ -31,6 +31,7 @@ class ExchangeWeight(BaseModel):
     exchange: str
     weight: float
     enabled: bool = True
+    open_interest_usd: float | None = None
 
 
 class HeatmapBucket(BaseModel):
@@ -48,6 +49,11 @@ class HeatmapResponse(BaseModel):
     currency: str
     range: str
     source: str = "api-mock"
+    fallback: bool = False
+    exchanges_used: list[str] = []
+    generated_at: int | None = None
+    warnings: list[str] = []
+    data_freshness_ms: int | None = None
     display_price: str
     last_price_usd: float
     fx_usd_jpy: float

@@ -139,7 +139,7 @@ h1 {
 .market-strip {
   min-width: 1440px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1px;
   margin: 14px 0;
   border: 1px solid var(--line);

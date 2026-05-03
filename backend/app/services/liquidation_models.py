@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import time
+
+from app.exchanges.base import MarketSnapshot
+from app.models.schemas import ExchangeWeight, HeatmapBucket
+from app.services.mock_heatmap import clamp
+
+LEVERAGE_DISTRIBUTION = (
+    (5, 0.10),
+    (10, 0.20),
+    (25, 0.30),
+    (50, 0.25),
+    (100, 0.15),
+)
+LIQUIDATION_BUFFER = 0.004
+
+
+def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[ExchangeWeight]:
+    total_oi = sum(max(0.0, snapshot.open_interest_usd) for snapshot in snapshots)
+    if total_oi <= 0:
+        return [ExchangeWeight(exchange=snapshot.exchange, weight=0.0, open_interest_usd=snapshot.open_interest_usd) for snapshot in snapshots]
+    return [
+        ExchangeWeight(
+            exchange=snapshot.exchange,
+            weight=snapshot.open_interest_usd / total_oi,
+            enabled=True,
+            open_interest_usd=snapshot.open_interest_usd,
+        )
+        for snapshot in snapshots
+    ]
+
+
+def build_live_buckets(snapshots: list[MarketSnapshot], model: int, response_range: str) -> list[HeatmapBucket]:
+    if model == 1:
+        return _build_model_1(snapshots, response_range)
+    if model == 2:
+        return _adjust_model_2(_build_model_1(snapshots, response_range))
+    return _adjust_model_3(_adjust_model_2(_build_model_1(snapshots, response_range)), snapshots)
+
+
+def _build_model_1(snapshots: list[MarketSnapshot], response_range: str) -> list[HeatmapBucket]:
+    bucket_size = 100 if response_range.lower() in {"24h", "7d"} else 250
+    raw: dict[float, dict[str, float]] = {}
+    generated_at = int(time.time())
+
+    for snapshot in snapshots:
+        oi_usd = max(0.0, snapshot.open_interest_usd)
+        for leverage, share in LEVERAGE_DISTRIBUTION:
+            notional = oi_usd * share
+            long_price = snapshot.mark_price * (1 - 1 / leverage + LIQUIDATION_BUFFER)
+            short_price = snapshot.mark_price * (1 + 1 / leverage - LIQUIDATION_BUFFER)
+            long_bucket = _bucket_price(long_price, bucket_size)
+            short_bucket = _bucket_price(short_price, bucket_size)
+            raw.setdefault(long_bucket, {"long": 0.0, "short": 0.0})["long"] += notional * 0.52
+            raw.setdefault(short_bucket, {"long": 0.0, "short": 0.0})["short"] += notional * 0.48
+
+    max_total = max((value["long"] + value["short"] for value in raw.values()), default=1.0)
+    return [
+        HeatmapBucket(
+            ts=generated_at,
+            price_bucket=price,
+            long_liq_usd=value["long"],
+            short_liq_usd=value["short"],
+            total_score=(value["long"] + value["short"]) / max_total,
+            confidence=0.72,
+        )
+        for price, value in sorted(raw.items())
+    ]
+
+
+def _adjust_model_2(buckets: list[HeatmapBucket]) -> list[HeatmapBucket]:
+    adjusted: list[HeatmapBucket] = []
+    for index, bucket in enumerate(buckets):
+        factor = 1.0 + (0.04 if index % 2 == 0 else -0.03)
+        adjusted.append(
+            HeatmapBucket(
+                ts=bucket.ts,
+                price_bucket=bucket.price_bucket,
+                long_liq_usd=bucket.long_liq_usd * factor,
+                short_liq_usd=bucket.short_liq_usd * (2 - factor),
+                total_score=clamp(bucket.total_score * factor, 0, 1),
+                confidence=clamp(bucket.confidence - 0.03, 0, 1),
+            )
+        )
+    return adjusted
+
+
+def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot]) -> list[HeatmapBucket]:
+    avg_funding = sum(snapshot.funding_rate for snapshot in snapshots) / max(1, len(snapshots))
+    long_factor = 0.96 if avg_funding > 0 else 1.04
+    short_factor = 1.04 if avg_funding > 0 else 0.96
+    return [
+        HeatmapBucket(
+            ts=bucket.ts,
+            price_bucket=bucket.price_bucket,
+            long_liq_usd=bucket.long_liq_usd * long_factor,
+            short_liq_usd=bucket.short_liq_usd * short_factor,
+            total_score=bucket.total_score,
+            confidence=clamp(bucket.confidence + 0.02, 0, 1),
+        )
+        for bucket in buckets
+    ]
+
+
+def _bucket_price(price: float, bucket_size: int) -> float:
+    return round(price / bucket_size) * bucket_size
