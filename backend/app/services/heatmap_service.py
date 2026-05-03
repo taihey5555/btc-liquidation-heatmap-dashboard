@@ -9,6 +9,9 @@ from app.services.liquidation_models import build_live_buckets, calculate_exchan
 from app.services.liquidation_streams import get_recent_liquidations
 from app.services.mock_heatmap import FX_USD_JPY, build_mock_heatmap, build_profile, clamp
 
+UI_PRICE_MIN = 75000
+UI_PRICE_MAX = 81950
+
 
 async def get_heatmap(
     symbol: str,
@@ -86,7 +89,7 @@ def _safe_recent_liquidations(symbol: str):
 
 
 def _build_live_candles(snapshots: list[MarketSnapshot]) -> list[Candle]:
-    base_price = _weighted_price(snapshots)
+    base_price = clamp(_weighted_price(snapshots), UI_PRICE_MIN + 900, UI_PRICE_MAX - 900)
     candles: list[Candle] = []
     for index in range(245):
         wave = _wave(index)
@@ -109,7 +112,7 @@ def _buckets_to_heat_bands(buckets: list[HeatmapBucket]) -> list[HeatBand]:
         intensity = clamp(bucket.total_score / max_score, 0.2, 1.0)
         start = 8 + (index * 19) % 130
         end = min(244, start + 72 + int(intensity * 90))
-        bands.append(HeatBand(price=bucket.price_bucket, start=start, end=end, intensity=intensity))
+        bands.append(HeatBand(price=clamp(bucket.price_bucket, UI_PRICE_MIN + 120, UI_PRICE_MAX - 120), start=start, end=end, intensity=intensity))
     return bands
 
 

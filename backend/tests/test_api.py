@@ -30,8 +30,10 @@ def test_heatmap_response_shape() -> None:
 def test_exchanges_status() -> None:
     response = client.get("/api/exchanges/status")
     assert response.status_code == 200
-    exchanges = {item["exchange"] for item in response.json()}
+    payload = response.json()
+    exchanges = {item["exchange"] for item in payload}
     assert exchanges == {"binance", "bybit", "okx", "gate", "mexc"}
+    assert all("data_fields_available" in item for item in payload)
 
 
 def test_recent_liquidations() -> None:

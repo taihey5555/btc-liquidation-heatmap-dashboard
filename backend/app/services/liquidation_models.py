@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 
 from app.exchanges.base import MarketSnapshot
@@ -21,8 +22,13 @@ def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[Exchange
     total_oi = sum(max(0.0, snapshot.open_interest_usd) for snapshot in eligible)
     if total_oi <= 0:
         mock_weights = {"binance": 0.34, "bybit": 0.26, "okx": 0.18, "gate": 0.12, "mexc": 0.10}
+        selected_total = sum(mock_weights.get(snapshot.exchange, 0.0) for snapshot in snapshots) or 1.0
         return [
-            ExchangeWeight(exchange=snapshot.exchange, weight=mock_weights.get(snapshot.exchange, 0.0), open_interest_usd=snapshot.open_interest_usd)
+            ExchangeWeight(
+                exchange=snapshot.exchange,
+                weight=mock_weights.get(snapshot.exchange, 0.0) / selected_total,
+                open_interest_usd=snapshot.open_interest_usd,
+            )
             for snapshot in snapshots
         ]
     return [
@@ -50,16 +56,19 @@ def build_live_buckets(
 
 
 def _build_model_1(snapshots: list[MarketSnapshot], response_range: str) -> list[HeatmapBucket]:
-    bucket_size = 100 if response_range.lower() in {"24h", "7d"} else 250
+    bucket_size = _bucket_size_for_range(response_range)
     raw: dict[float, dict[str, float]] = {}
     generated_at = int(time.time())
 
     for snapshot in snapshots:
-        oi_usd = max(0.0, snapshot.open_interest_usd)
+        mark_price = _finite_positive(snapshot.mark_price)
+        if mark_price <= 0:
+            continue
+        oi_usd = _snapshot_notional(snapshot)
         for leverage, share in LEVERAGE_DISTRIBUTION:
             notional = oi_usd * share
-            long_price = snapshot.mark_price * (1 - 1 / leverage + LIQUIDATION_BUFFER)
-            short_price = snapshot.mark_price * (1 + 1 / leverage - LIQUIDATION_BUFFER)
+            long_price = mark_price * (1 - 1 / leverage + LIQUIDATION_BUFFER)
+            short_price = mark_price * (1 + 1 / leverage - LIQUIDATION_BUFFER)
             long_bucket = _bucket_price(long_price, bucket_size)
             short_bucket = _bucket_price(short_price, bucket_size)
             raw.setdefault(long_bucket, {"long": 0.0, "short": 0.0})["long"] += notional * 0.52
@@ -73,8 +82,8 @@ def _build_model_1(snapshots: list[MarketSnapshot], response_range: str) -> list
             price_bucket=price,
             long_liq_usd=value["long"],
             short_liq_usd=value["short"],
-            total_score=(value["long"] + value["short"]) / max_total,
-            confidence=confidence,
+            total_score=clamp((value["long"] + value["short"]) / max_total, 0, 1),
+            confidence=clamp(confidence, 0, 1),
         )
         for price, value in sorted(raw.items())
     ]
@@ -117,6 +126,31 @@ def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot
 
 def _bucket_price(price: float, bucket_size: int) -> float:
     return round(price / bucket_size) * bucket_size
+
+
+def _bucket_size_for_range(response_range: str) -> int:
+    normalized = response_range.lower()
+    if normalized in {"12h", "24h"}:
+        return 100
+    if normalized in {"3d", "7d", "30d"}:
+        return 250
+    return 500
+
+
+def _snapshot_notional(snapshot: MarketSnapshot) -> float:
+    if _is_finite_positive(snapshot.open_interest_usd):
+        return snapshot.open_interest_usd
+    if _is_finite_positive(snapshot.open_interest) and _is_finite_positive(snapshot.mark_price):
+        return snapshot.open_interest * snapshot.mark_price
+    return max(_finite_positive(snapshot.mark_price), 1.0) * 100
+
+
+def _finite_positive(value: float) -> float:
+    return value if _is_finite_positive(value) else 0.0
+
+
+def _is_finite_positive(value: float) -> bool:
+    return math.isfinite(value) and value > 0
 
 
 def _base_confidence(snapshots: list[MarketSnapshot]) -> float:

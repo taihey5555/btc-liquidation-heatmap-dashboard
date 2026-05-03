@@ -10,6 +10,8 @@ from app.config import get_settings
 from app.exchanges import binance, bybit, gate, mexc, okx
 from app.exchanges.base import ExchangeStatus, LiveExchangeAdapter, MarketSnapshot
 
+COLLECTOR_TIMEOUT_SECONDS = 9.0
+
 ADAPTERS_BY_NAME: dict[str, LiveExchangeAdapter] = {
     "binance": binance.adapter,
     "bybit": bybit.adapter,
@@ -73,11 +75,12 @@ async def collect_market_data(
 async def _collect_one(adapter: LiveExchangeAdapter, symbol: str) -> tuple[MarketSnapshot | None, ExchangeStatus, str | None]:
     start = time.perf_counter()
     try:
-        snapshot = await adapter.get_market_snapshot(symbol)
+        snapshot = await asyncio.wait_for(adapter.get_market_snapshot(symbol), timeout=COLLECTOR_TIMEOUT_SECONDS)
     except Exception as exc:
         latency = int((time.perf_counter() - start) * 1000)
-        status = ExchangeStatus(exchange=adapter.name, enabled=True, last_error=str(exc), latency_ms=latency, data_fields_available=[])
-        return None, status, f"{adapter.name}: {exc}"
+        error_message = _format_error(exc)
+        status = ExchangeStatus(exchange=adapter.name, enabled=True, last_error=error_message, latency_ms=latency, data_fields_available=[])
+        return None, status, f"{adapter.name}: {error_message}"
 
     latency = int((time.perf_counter() - start) * 1000)
     status = ExchangeStatus(
@@ -111,6 +114,11 @@ def _snapshot_fields_available(snapshot: MarketSnapshot) -> list[str]:
     if snapshot.volume_24h > 0:
         fields.append("volume_24h")
     return fields
+
+
+def _format_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
 
 
 def _save_market_snapshot(snapshot: MarketSnapshot) -> None:

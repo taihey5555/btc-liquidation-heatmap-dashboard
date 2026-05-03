@@ -144,6 +144,7 @@ export default function Home() {
   const [recentLiquidations, setRecentLiquidations] = useState<ApiLiquidationEvent[]>([]);
   const [exchangeStatuses, setExchangeStatuses] = useState<ApiExchangeStatus[]>([]);
   const [enabledExchanges, setEnabledExchanges] = useState<string[]>(liveExchanges);
+  const enabledExchangeKey = enabledExchanges.join(",");
   const mockCandles = useMemo(() => buildCandles(), []);
   const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
   const mockProfile = useMemo(() => buildProfile(), []);
@@ -185,7 +186,7 @@ export default function Home() {
     let cancelled = false;
 
     const loadLiveHeatmap = () => {
-      fetchHeatmap({ symbol: "BTCUSDT", model, currency, range, source: "live", exchanges: enabledExchanges })
+      fetchHeatmap({ symbol: "BTCUSDT", model, currency, range, source: "live", exchanges: enabledExchangeKey.split(",") })
         .then((response) => {
           if (!cancelled) {
             setApiData(response);
@@ -207,7 +208,7 @@ export default function Home() {
       cancelled = true;
       window.clearInterval(refreshId);
     };
-  }, [currency, dataMode, enabledExchanges, model, range]);
+  }, [currency, dataMode, enabledExchangeKey, model, range]);
 
   useEffect(() => {
     if (dataMode !== "live") {
@@ -248,7 +249,7 @@ export default function Home() {
         <div className="toolbar">
           <Segmented label="Source" value={dataMode.toUpperCase()} items={["MOCK", "LIVE"]} onSelect={(value) => setDataMode(value.toLowerCase() as DataMode)} />
           <Segmented label="Model" value={`Model ${model}`} items={["Model 1", "Model 2", "Model 3"]} onSelect={(value) => setModel(Number(value.slice(-1)))} />
-          <Segmented label="Range" value={range} items={["24H", "7D", "30D", "90D"]} onSelect={setRange} />
+          <Segmented label="Range" value={range} items={["12H", "24H", "3D", "7D", "30D", "90D", "180D", "1Y"]} onSelect={setRange} />
           <Segmented label="Currency" value={currency} items={["USD", "JPY"]} onSelect={(value) => setCurrency(value as "USD" | "JPY")} />
           <label className="threshold">
             <span>Threshold</span>
