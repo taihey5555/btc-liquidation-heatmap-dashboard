@@ -3,3 +3,8 @@ node_modules
 out
 *.log
 .env*
+.pytest_cache
+__pycache__
+*.pyc
+backend/*.db
+backend/**/*.db

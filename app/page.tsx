@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetchHeatmap, type HeatmapResponse } from "./lib/heatmapApi";
 
 type Candle = {
   time: string;
@@ -22,6 +23,8 @@ type ProfileRow = {
   long: number;
   short: number;
 };
+
+type DataMode = "mock" | "api";
 
 const priceMin = 75000;
 const priceMax = 81950;
@@ -124,26 +127,68 @@ function heatColor(intensity: number) {
 
 export default function Home() {
   const [model, setModel] = useState(1);
-  const [range, setRange] = useState("24H");
+  const [range, setRange] = useState("90D");
   const [currency, setCurrency] = useState<"USD" | "JPY">("USD");
   const [threshold, setThreshold] = useState(18);
-  const candles = useMemo(() => buildCandles(), []);
-  const heatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
-  const profile = useMemo(() => buildProfile(), []);
+  const [dataMode, setDataMode] = useState<DataMode>("mock");
+  const [apiData, setApiData] = useState<HeatmapResponse | null>(null);
+  const [apiStatus, setApiStatus] = useState<"idle" | "ready" | "fallback">("idle");
+  const mockCandles = useMemo(() => buildCandles(), []);
+  const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
+  const mockProfile = useMemo(() => buildProfile(), []);
+  const useApiData = dataMode === "api" && apiData !== null && apiStatus === "ready";
+  const candles = useApiData ? apiData.candles : mockCandles;
+  const heatBands = useMemo(() => {
+    const sourceBands = useApiData ? apiData.heat_bands : mockHeatBands;
+    return sourceBands.filter((band) => band.intensity * 100 >= threshold);
+  }, [apiData, mockHeatBands, threshold, useApiData]);
+  const profile = useApiData ? apiData.profile : mockProfile;
   const last = candles[candles.length - 1].close;
   const fx = 157;
-  const priceLabel = currency === "USD" ? `$${last.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `¥${Math.round(last * fx).toLocaleString("ja-JP")}`;
+  const priceLabel = useApiData
+    ? apiData.display_price
+    : currency === "USD"
+      ? `$${last.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+      : `¥${Math.round(last * fx).toLocaleString("ja-JP")}`;
+  const dataStatusLabel = dataMode === "mock" ? "mock" : apiStatus === "ready" ? "api" : "mock fallback";
+
+  useEffect(() => {
+    if (dataMode !== "api") {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchHeatmap({ symbol: "BTCUSDT", model, currency, range })
+      .then((response) => {
+        if (!cancelled) {
+          setApiData(response);
+          setApiStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setApiData(null);
+          setApiStatus("fallback");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currency, dataMode, model, range]);
 
   return (
     <main className="terminal-shell">
       <header className="topbar">
         <div className="title-block">
-          <p className="eyebrow">Mock data / BTCUSDT perpetual</p>
+          <p className="eyebrow">BTCUSDT perpetual / <span className={`data-status ${dataStatusLabel.includes("api") ? "api" : "mock"}`}>{dataStatusLabel}</span></p>
           <h1>Liquidation Heatmap Dashboard</h1>
         </div>
         <div className="toolbar">
+          <Segmented label="Source" value={dataMode.toUpperCase()} items={["MOCK", "API"]} onSelect={(value) => setDataMode(value.toLowerCase() as DataMode)} />
           <Segmented label="Model" value={`Model ${model}`} items={["Model 1", "Model 2", "Model 3"]} onSelect={(value) => setModel(Number(value.slice(-1)))} />
-          <Segmented label="Range" value={range} items={["12H", "24H", "3D", "7D"]} onSelect={setRange} />
+          <Segmented label="Range" value={range} items={["24H", "7D", "30D", "90D"]} onSelect={setRange} />
           <Segmented label="Currency" value={currency} items={["USD", "JPY"]} onSelect={(value) => setCurrency(value as "USD" | "JPY")} />
           <label className="threshold">
             <span>Threshold</span>

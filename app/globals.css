@@ -54,6 +54,25 @@ input {
   text-transform: uppercase;
 }
 
+.data-status {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 4px;
+  color: #071018;
+  background: #9aa7b7;
+  font-weight: 800;
+}
+
+.data-status.api {
+  background: var(--cyan);
+}
+
+.data-status.mock {
+  background: #f0b84f;
+}
+
 h1 {
   margin: 0;
   font-size: 25px;
@@ -84,7 +103,7 @@ h1 {
 }
 
 .segmented button {
-  min-width: 62px;
+  min-width: 58px;
   color: #aeb8c7;
   background: transparent;
   border: 0;
