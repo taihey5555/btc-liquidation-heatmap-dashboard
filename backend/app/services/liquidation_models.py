@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from app.exchanges.base import MarketSnapshot
-from app.models.schemas import ExchangeWeight, HeatmapBucket
+from app.models.schemas import ExchangeWeight, HeatmapBucket, LiquidationEvent
 from app.services.mock_heatmap import clamp
 
 LEVERAGE_DISTRIBUTION = (
@@ -31,12 +31,17 @@ def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[Exchange
     ]
 
 
-def build_live_buckets(snapshots: list[MarketSnapshot], model: int, response_range: str) -> list[HeatmapBucket]:
+def build_live_buckets(
+    snapshots: list[MarketSnapshot],
+    model: int,
+    response_range: str,
+    liquidation_events: list[LiquidationEvent] | None = None,
+) -> list[HeatmapBucket]:
     if model == 1:
         return _build_model_1(snapshots, response_range)
     if model == 2:
         return _adjust_model_2(_build_model_1(snapshots, response_range))
-    return _adjust_model_3(_adjust_model_2(_build_model_1(snapshots, response_range)), snapshots)
+    return _adjust_model_3(_adjust_model_2(_build_model_1(snapshots, response_range)), snapshots, liquidation_events or [])
 
 
 def _build_model_1(snapshots: list[MarketSnapshot], response_range: str) -> list[HeatmapBucket]:
@@ -86,18 +91,19 @@ def _adjust_model_2(buckets: list[HeatmapBucket]) -> list[HeatmapBucket]:
     return adjusted
 
 
-def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot]) -> list[HeatmapBucket]:
+def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot], liquidation_events: list[LiquidationEvent]) -> list[HeatmapBucket]:
     avg_funding = sum(snapshot.funding_rate for snapshot in snapshots) / max(1, len(snapshots))
     long_factor = 0.96 if avg_funding > 0 else 1.04
     short_factor = 1.04 if avg_funding > 0 else 0.96
+    event_scores = _event_activity_scores(buckets, liquidation_events)
     return [
         HeatmapBucket(
             ts=bucket.ts,
             price_bucket=bucket.price_bucket,
             long_liq_usd=bucket.long_liq_usd * long_factor,
             short_liq_usd=bucket.short_liq_usd * short_factor,
-            total_score=bucket.total_score,
-            confidence=clamp(bucket.confidence + 0.02, 0, 1),
+            total_score=clamp(bucket.total_score + event_scores.get(bucket.price_bucket, 0.0) * 0.08, 0, 1),
+            confidence=clamp(bucket.confidence + 0.02 + event_scores.get(bucket.price_bucket, 0.0) * 0.10, 0, 1),
         )
         for bucket in buckets
     ]
@@ -105,3 +111,18 @@ def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot
 
 def _bucket_price(price: float, bucket_size: int) -> float:
     return round(price / bucket_size) * bucket_size
+
+
+def _event_activity_scores(buckets: list[HeatmapBucket], liquidation_events: list[LiquidationEvent]) -> dict[float, float]:
+    if not buckets or not liquidation_events:
+        return {}
+    bucket_prices = [bucket.price_bucket for bucket in buckets]
+    raw_scores = {price: 0.0 for price in bucket_prices}
+    max_notional = max((event.notional_usd for event in liquidation_events), default=1.0) or 1.0
+    for event in liquidation_events:
+        nearest = min(bucket_prices, key=lambda price: abs(price - event.price))
+        # Executed liquidations are historical activity, not future liquidation
+        # levels, so this is deliberately a small confidence/activity nudge.
+        raw_scores[nearest] += min(event.notional_usd / max_notional, 1.0)
+    max_score = max(raw_scores.values(), default=1.0) or 1.0
+    return {price: score / max_score for price, score in raw_scores.items() if score > 0}

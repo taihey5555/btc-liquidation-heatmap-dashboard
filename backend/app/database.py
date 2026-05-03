@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS liquidation_events (
     price REAL NOT NULL,
     quantity REAL NOT NULL,
     notional_usd REAL NOT NULL,
+    event_hash TEXT,
     raw_json TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -49,8 +50,12 @@ CREATE TABLE IF NOT EXISTS exchange_status (
     enabled INTEGER NOT NULL,
     last_success_ts INTEGER,
     last_error TEXT,
-    latency_ms INTEGER
+    latency_ms INTEGER,
+    websocket_connected INTEGER NOT NULL DEFAULT 0,
+    websocket_last_message_ts INTEGER,
+    websocket_last_error TEXT
 );
+
 """
 
 
@@ -64,9 +69,26 @@ def get_connection(database_path: Path | None = None) -> sqlite3.Connection:
 
 def create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA_SQL)
+    _ensure_column(connection, "liquidation_events", "event_hash", "TEXT")
+    _ensure_column(connection, "exchange_status", "websocket_connected", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(connection, "exchange_status", "websocket_last_message_ts", "INTEGER")
+    _ensure_column(connection, "exchange_status", "websocket_last_error", "TEXT")
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidation_events_hash
+        ON liquidation_events(event_hash)
+        WHERE event_hash IS NOT NULL
+        """
+    )
     connection.commit()
 
 
 def init_database(database_path: Path | None = None) -> None:
     with get_connection(database_path) as connection:
         create_schema(connection)
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    if column not in {row["name"] for row in rows}:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

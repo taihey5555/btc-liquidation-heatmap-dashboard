@@ -31,6 +31,24 @@ export type ApiExchangeWeight = {
   open_interest_usd?: number | null;
 };
 
+export type ApiLiquidationEvent = {
+  exchange: string;
+  symbol: string;
+  ts: number;
+  side: string;
+  price: number;
+  quantity: number;
+  notional_usd: number;
+};
+
+export type ApiExchangeStatus = {
+  exchange: string;
+  enabled: boolean;
+  websocket_connected: boolean;
+  websocket_last_message_ts: number | null;
+  websocket_last_error: string | null;
+};
+
 export type HeatmapResponse = {
   symbol: string;
   model: number;
@@ -77,4 +95,25 @@ export async function fetchHeatmap(params: {
   }
 
   return response.json() as Promise<HeatmapResponse>;
+}
+
+export async function fetchRecentLiquidations(symbol = "BTCUSDT", limit = 12): Promise<ApiLiquidationEvent[]> {
+  const searchParams = new URLSearchParams({ symbol, limit: String(limit) });
+  const response = await fetch(`${API_BASE_URL}/api/liquidations/recent?${searchParams.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Recent liquidations API failed with ${response.status}`);
+  }
+  return response.json() as Promise<ApiLiquidationEvent[]>;
+}
+
+export async function fetchExchangeStatus(): Promise<ApiExchangeStatus[]> {
+  const response = await fetch(`${API_BASE_URL}/api/exchanges/status`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Exchange status API failed with ${response.status}`);
+  }
+  return response.json() as Promise<ApiExchangeStatus[]>;
 }

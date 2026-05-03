@@ -71,6 +71,9 @@ class ExchangeStatus(BaseModel):
     last_success_ts: int | None = None
     last_error: str | None = None
     latency_ms: int | None = None
+    websocket_connected: bool = False
+    websocket_last_message_ts: int | None = None
+    websocket_last_error: str | None = None
 
 
 class LiquidationEvent(BaseModel):
@@ -81,3 +84,4 @@ class LiquidationEvent(BaseModel):
     price: float
     quantity: float
     notional_usd: float
+    raw_json: dict | None = None

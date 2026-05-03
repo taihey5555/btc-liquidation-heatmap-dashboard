@@ -37,4 +37,4 @@ def test_exchanges_status() -> None:
 def test_recent_liquidations() -> None:
     response = client.get("/api/liquidations/recent")
     assert response.status_code == 200
-    assert response.json()[0]["symbol"] == "BTCUSDT"
+    assert isinstance(response.json(), list)

@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchHeatmap, type HeatmapResponse } from "./lib/heatmapApi";
+import {
+  fetchExchangeStatus,
+  fetchHeatmap,
+  fetchRecentLiquidations,
+  type ApiExchangeStatus,
+  type ApiLiquidationEvent,
+  type HeatmapResponse,
+} from "./lib/heatmapApi";
 
 type Candle = {
   time: string;
@@ -133,6 +140,8 @@ export default function Home() {
   const [dataMode, setDataMode] = useState<DataMode>("mock");
   const [apiData, setApiData] = useState<HeatmapResponse | null>(null);
   const [apiStatus, setApiStatus] = useState<"idle" | "ready" | "fallback">("idle");
+  const [recentLiquidations, setRecentLiquidations] = useState<ApiLiquidationEvent[]>([]);
+  const [exchangeStatuses, setExchangeStatuses] = useState<ApiExchangeStatus[]>([]);
   const mockCandles = useMemo(() => buildCandles(), []);
   const mockHeatBands = useMemo(() => buildHeatBands(model, threshold), [model, threshold]);
   const mockProfile = useMemo(() => buildProfile(), []);
@@ -189,6 +198,35 @@ export default function Home() {
       window.clearInterval(refreshId);
     };
   }, [currency, dataMode, model, range]);
+
+  useEffect(() => {
+    if (dataMode !== "live") {
+      return;
+    }
+
+    let cancelled = false;
+    const loadStreamData = () => {
+      Promise.all([fetchRecentLiquidations("BTCUSDT", 8), fetchExchangeStatus()])
+        .then(([events, statuses]) => {
+          if (!cancelled) {
+            setRecentLiquidations(events);
+            setExchangeStatuses(statuses);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setRecentLiquidations([]);
+          }
+        });
+    };
+
+    loadStreamData();
+    const refreshId = window.setInterval(loadStreamData, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshId);
+    };
+  }, [dataMode]);
 
   return (
     <main className="terminal-shell">
@@ -310,7 +348,7 @@ export default function Home() {
           <div className="bottom-panel">
             <div className="bottom-title">
               <span>Accumulated Longs vs Shorts</span>
-              <strong>Net Longs - Shorts</strong>
+              <strong>{model === 3 && dataMode === "live" ? "Net Longs - Shorts / liquidation events adjusted" : "Net Longs - Shorts"}</strong>
             </div>
             <svg viewBox={`0 0 ${chartWidth} ${bottomHeight}`} className="net-chart" role="img" aria-label="Accumulated longs shorts mock chart">
               <path
@@ -325,6 +363,33 @@ export default function Home() {
               />
             </svg>
           </div>
+
+          <aside className="liquidation-panel">
+            <div className="stream-status-row">
+              {["binance", "bybit"].map((exchange) => {
+                const status = exchangeStatuses.find((item) => item.exchange === exchange);
+                return (
+                  <span key={exchange} className={status?.websocket_connected ? "stream-on" : "stream-off"}>
+                    {exchange.toUpperCase()} WS {status?.websocket_connected ? "ON" : "OFF"}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="liquidation-list">
+              {recentLiquidations.length === 0 ? (
+                <span className="empty-events">No recent liquidation events</span>
+              ) : (
+                recentLiquidations.slice(0, 6).map((event) => (
+                  <div className="liquidation-item" key={`${event.exchange}-${event.ts}-${event.side}-${event.price}`}>
+                    <span>{event.exchange}</span>
+                    <strong className={event.side.includes("long") ? "long-event" : "short-event"}>{event.side.replace("_liquidated", "")}</strong>
+                    <span>{event.price.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                    <span>${event.notional_usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
         </section>
       </div>
     </main>

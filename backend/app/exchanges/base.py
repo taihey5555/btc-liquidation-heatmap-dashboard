@@ -68,12 +68,27 @@ class MarketSnapshot:
 
 
 @dataclass(frozen=True)
+class LiquidationEventSnapshot:
+    exchange: str
+    symbol: str
+    ts: int
+    side: str
+    price: float
+    quantity: float
+    notional_usd: float
+    raw_json: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ExchangeStatus:
     exchange: str
     enabled: bool
     last_success_ts: int | None = None
     last_error: str | None = None
     latency_ms: int | None = None
+    websocket_connected: bool = False
+    websocket_last_message_ts: int | None = None
+    websocket_last_error: str | None = None
 
 
 class LiveExchangeAdapter(Protocol):
@@ -113,6 +128,9 @@ class ExchangeAdapter:
             "last_success_ts": None,
             "last_error": "live public API integration is not implemented",
             "latency_ms": None,
+            "websocket_connected": False,
+            "websocket_last_message_ts": None,
+            "websocket_last_error": None,
         }
 
 

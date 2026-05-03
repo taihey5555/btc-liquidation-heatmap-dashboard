@@ -363,6 +363,62 @@ h1 {
   padding-top: 10px;
 }
 
+.liquidation-panel {
+  grid-column: 3;
+  grid-row: 2;
+  height: 118px;
+  padding-top: 10px;
+  color: #a8b2c1;
+  font-size: 11px;
+}
+
+.stream-status-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.stream-status-row span {
+  padding: 4px 6px;
+  border: 1px solid #23364b;
+  border-radius: 4px;
+  background: #071019;
+  font-weight: 800;
+}
+
+.stream-on {
+  color: var(--cyan);
+}
+
+.stream-off {
+  color: #f0b84f;
+}
+
+.liquidation-list {
+  display: grid;
+  gap: 4px;
+}
+
+.liquidation-item {
+  display: grid;
+  grid-template-columns: 46px 38px 1fr 1fr;
+  gap: 6px;
+  align-items: center;
+  height: 16px;
+}
+
+.long-event {
+  color: var(--pink);
+}
+
+.short-event {
+  color: var(--cyan);
+}
+
+.empty-events {
+  color: #697789;
+}
+
 .bottom-title {
   display: flex;
   justify-content: space-between;

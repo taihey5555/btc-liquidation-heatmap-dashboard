@@ -6,6 +6,7 @@ from app.exchanges.base import MarketSnapshot
 from app.models.schemas import Candle, HeatBand, HeatmapBucket, HeatmapResponse, NetPoint, ProfileRow
 from app.services.collector import collect_market_data
 from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights
+from app.services.liquidation_streams import get_recent_liquidations
 from app.services.mock_heatmap import FX_USD_JPY, build_mock_heatmap, build_profile, clamp
 
 
@@ -29,7 +30,13 @@ async def get_live_heatmap(symbol: str, model: int, currency: str, response_rang
         return fallback
 
     snapshots = collector_result.snapshots
-    buckets = build_live_buckets(snapshots=snapshots, model=model, response_range=response_range)
+    recent_liquidations = _safe_recent_liquidations(symbol) if model == 3 else []
+    buckets = build_live_buckets(
+        snapshots=snapshots,
+        model=model,
+        response_range=response_range,
+        liquidation_events=recent_liquidations,
+    )
     candles = _build_live_candles(snapshots)
     last_price = _weighted_price(snapshots)
     normalized_currency = currency.upper()
@@ -62,6 +69,13 @@ def _weighted_price(snapshots: list[MarketSnapshot]) -> float:
     if total_oi <= 0:
         return sum(snapshot.mark_price for snapshot in snapshots) / len(snapshots)
     return sum(snapshot.mark_price * snapshot.open_interest_usd for snapshot in snapshots) / total_oi
+
+
+def _safe_recent_liquidations(symbol: str):
+    try:
+        return get_recent_liquidations(symbol=symbol, limit=200)
+    except Exception:
+        return []
 
 
 def _build_live_candles(snapshots: list[MarketSnapshot]) -> list[Candle]:
