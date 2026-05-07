@@ -5,6 +5,7 @@ import time
 import httpx
 
 from app.exchanges.base import (
+    CandleSnapshot,
     FundingRateSnapshot,
     MarketSnapshot,
     OpenInterestSnapshot,
@@ -91,6 +92,26 @@ class BinanceAdapter:
             asks=[OrderBookLevel(price=to_float(level[0]), quantity=to_float(level[1])) for level in payload.get("asks", [])],
             raw_json=payload,
         )
+
+    async def get_klines(self, symbol: str, interval: str = "15m", limit: int = 245) -> list[CandleSnapshot]:
+        normalized = self.normalize_symbol(symbol)
+        payload = await self._get("/fapi/v1/klines", {"symbol": normalized, "interval": interval, "limit": limit})
+        candles: list[CandleSnapshot] = []
+        for row in payload:
+            candles.append(
+                CandleSnapshot(
+                    exchange=self.name,
+                    symbol=normalized,
+                    ts=to_int(row[0], int(time.time() * 1000)) or int(time.time() * 1000),
+                    open=to_float(row[1]),
+                    high=to_float(row[2]),
+                    low=to_float(row[3]),
+                    close=to_float(row[4]),
+                    volume=to_float(row[5]),
+                    raw_json=row,
+                )
+            )
+        return candles
 
     async def get_market_snapshot(self, symbol: str) -> MarketSnapshot:
         normalized = self.normalize_symbol(symbol)

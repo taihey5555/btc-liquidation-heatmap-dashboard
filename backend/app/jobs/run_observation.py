@@ -4,15 +4,17 @@ import argparse
 import asyncio
 import logging
 
+from app.config import get_settings
 from app.database import init_database
 from app.services.observation import run_observation
 
 
 def parse_args() -> argparse.Namespace:
+    settings = get_settings()
     parser = argparse.ArgumentParser(description="Run BTCUSDT heatmap observation mode")
     parser.add_argument("--symbol", default="BTCUSDT")
-    parser.add_argument("--interval", type=int, default=60)
-    parser.add_argument("--duration-hours", type=float, default=24)
+    parser.add_argument("--interval", type=int, default=settings.observation_interval_seconds)
+    parser.add_argument("--duration-hours", type=float, default=settings.observation_duration_hours)
     parser.add_argument("--iterations", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Run one immediate iteration without sleeping")
     return parser.parse_args()

@@ -1,0 +1,19 @@
+[Unit]
+Description=BTCUSDT Liquidation Heatmap Next.js frontend
+After=network-online.target btc-heatmap-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btcmap
+Group=btcmap
+WorkingDirectory=/opt/btc-liquidation-heatmap-dashboard
+EnvironmentFile=/opt/btc-liquidation-heatmap-dashboard/.env
+ExecStart=/usr/bin/npx next start --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

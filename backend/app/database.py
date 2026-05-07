@@ -45,6 +45,27 @@ CREATE TABLE IF NOT EXISTS heatmap_buckets (
     confidence REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS oi_delta_buckets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exchange TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    price_bucket REAL NOT NULL,
+    side TEXT NOT NULL,
+    oi_delta_usd REAL NOT NULL,
+    score REAL NOT NULL,
+    confidence REAL NOT NULL,
+    source_snapshot_ts INTEGER NOT NULL,
+    previous_snapshot_ts INTEGER,
+    raw_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_oi_delta_buckets_symbol_ts
+ON oi_delta_buckets(symbol, ts);
+
+CREATE INDEX IF NOT EXISTS idx_oi_delta_buckets_symbol_side_price
+ON oi_delta_buckets(symbol, side, price_bucket);
+
 CREATE TABLE IF NOT EXISTS exchange_status (
     exchange TEXT PRIMARY KEY,
     enabled INTEGER NOT NULL,

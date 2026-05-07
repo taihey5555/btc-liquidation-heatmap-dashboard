@@ -31,6 +31,19 @@ export type ApiExchangeWeight = {
   open_interest_usd?: number | null;
 };
 
+export type ApiHeatmapBucket = {
+  ts: number;
+  price_bucket: number;
+  long_liq_usd: number;
+  short_liq_usd: number;
+  total_score: number;
+  confidence: number;
+  relative_intensity: number;
+  dominant_side: "long" | "short" | "balanced" | string;
+  estimated_liq_usd: number;
+  consumed_score: number;
+};
+
 export type ApiLiquidationEvent = {
   exchange: string;
   symbol: string;
@@ -44,9 +57,14 @@ export type ApiLiquidationEvent = {
 export type ApiExchangeStatus = {
   exchange: string;
   enabled: boolean;
+  last_success_ts?: number | null;
+  last_error?: string | null;
+  latency_ms?: number | null;
   websocket_connected: boolean;
   websocket_last_message_ts: number | null;
   websocket_last_error: string | null;
+  websocket_status_reason?: string | null;
+  data_fields_available?: string[];
 };
 
 export type ApiObservationRun = {
@@ -93,9 +111,12 @@ export type HeatmapResponse = {
   source: string;
   fallback: boolean;
   exchanges_used: string[];
+  excluded_exchanges: string[];
   generated_at: number | null;
   warnings: string[];
   data_freshness_ms: number | null;
+  current_price: number | null;
+  current_price_source: string;
   display_price: string;
   last_price_usd: number;
   fx_usd_jpy: number;
@@ -103,10 +124,14 @@ export type HeatmapResponse = {
   heat_bands: ApiHeatBand[];
   profile: ApiProfileRow[];
   net: ApiNetPoint[];
+  buckets: ApiHeatmapBucket[];
   exchange_weights: ApiExchangeWeight[];
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_HEATMAP_API_URL ?? "http://127.0.0.1:8000";
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_HEATMAP_API_URL ??
+  process.env.NEXT_PUBLIC_HEATMAP_API_BASE ??
+  "http://127.0.0.1:8000";
 
 export async function fetchHeatmap(params: {
   symbol: string;

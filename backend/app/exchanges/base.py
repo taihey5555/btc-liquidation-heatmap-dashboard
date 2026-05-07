@@ -68,6 +68,19 @@ class MarketSnapshot:
 
 
 @dataclass(frozen=True)
+class CandleSnapshot:
+    exchange: str
+    symbol: str
+    ts: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    raw_json: dict | list = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class LiquidationEventSnapshot:
     exchange: str
     symbol: str
@@ -112,6 +125,9 @@ class LiveExchangeAdapter(Protocol):
         ...
 
     async def get_ticker(self, symbol: str) -> TickerSnapshot:
+        ...
+
+    async def get_klines(self, symbol: str, interval: str = "15m", limit: int = 245) -> list[CandleSnapshot]:
         ...
 
 

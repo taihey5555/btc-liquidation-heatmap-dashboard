@@ -11,4 +11,5 @@ def test_sqlite_schema_creation(tmp_path) -> None:
     assert "market_snapshots" in tables
     assert "liquidation_events" in tables
     assert "heatmap_buckets" in tables
+    assert "oi_delta_buckets" in tables
     assert "exchange_status" in tables

@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from app.database import get_connection
 from app.config import get_settings
 from app.exchanges import binance, bybit, gate, mexc, okx
-from app.exchanges.base import ExchangeStatus, LiveExchangeAdapter, MarketSnapshot
+from app.exchanges.base import CandleSnapshot, ExchangeStatus, LiveExchangeAdapter, MarketSnapshot
+from app.services.oi_delta_service import record_oi_delta_buckets
 
 COLLECTOR_TIMEOUT_SECONDS = 9.0
 
@@ -28,6 +29,7 @@ class CollectorResult:
     warnings: list[str]
     started_at_ms: int
     finished_at_ms: int
+    candles: list[CandleSnapshot] | None = None
 
     @property
     def exchanges_used(self) -> list[str]:
@@ -59,9 +61,12 @@ async def collect_market_data(
         if snapshot is not None:
             snapshots.append(snapshot)
             _save_market_snapshot(snapshot)
+            _save_oi_delta_buckets(snapshot, warnings)
         if warning:
             warnings.append(warning)
         _save_exchange_status(status)
+
+    candles = await _collect_reference_candles(symbol, selected_adapters, warnings)
 
     return CollectorResult(
         snapshots=snapshots,
@@ -69,7 +74,23 @@ async def collect_market_data(
         warnings=warnings,
         started_at_ms=started,
         finished_at_ms=int(time.time() * 1000),
+        candles=candles,
     )
+
+
+async def _collect_reference_candles(symbol: str, adapters: list[LiveExchangeAdapter], warnings: list[str]) -> list[CandleSnapshot] | None:
+    for adapter in adapters:
+        get_klines = getattr(adapter, "get_klines", None)
+        if get_klines is None:
+            continue
+        try:
+            candles = await asyncio.wait_for(get_klines(symbol, interval="15m", limit=245), timeout=COLLECTOR_TIMEOUT_SECONDS)
+        except Exception as exc:
+            warnings.append(f"{adapter.name} klines: {_format_error(exc)}")
+            continue
+        if candles:
+            return candles
+    return None
 
 
 async def _collect_one(adapter: LiveExchangeAdapter, symbol: str) -> tuple[MarketSnapshot | None, ExchangeStatus, str | None]:
@@ -144,6 +165,13 @@ def _save_market_snapshot(snapshot: MarketSnapshot) -> None:
             ),
         )
         connection.commit()
+
+
+def _save_oi_delta_buckets(snapshot: MarketSnapshot, warnings: list[str]) -> None:
+    try:
+        record_oi_delta_buckets(snapshot)
+    except Exception as exc:
+        warnings.append(f"{snapshot.exchange} oi_delta: {_format_error(exc)}")
 
 
 def _save_exchange_status(status: ExchangeStatus) -> None:

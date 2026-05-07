@@ -34,6 +34,13 @@ class FakeClient:
             return FakeResponse({"symbol": "BTCUSDT", "lastPrice": "82002.00", "volume": "9876.5", "quoteVolume": "800000000"})
         if path == "/fapi/v1/depth":
             return FakeResponse({"E": 1760000000200, "bids": [["81999", "1.2"]], "asks": [["82001", "0.8"]]})
+        if path == "/fapi/v1/klines":
+            return FakeResponse(
+                [
+                    [1760000000000, "81000.0", "81200.0", "80800.0", "81150.0", "12.5"],
+                    [1760000900000, "81150.0", "81300.0", "81000.0", "81250.0", "9.5"],
+                ]
+            )
         raise AssertionError(path)
 
 
@@ -55,3 +62,13 @@ async def _assert_binance_market_snapshot_normalization() -> None:
     assert snapshot.open_interest_usd == pytest.approx(12345.67 * 82000.10)
     assert orderbook.bids[0].price == 81999
     assert orderbook.asks[0].quantity == 0.8
+
+
+def test_binance_klines_normalization() -> None:
+    candles = asyncio.run(BinanceAdapter(client=FakeClient()).get_klines("BTCUSDT", interval="15m", limit=2))
+
+    assert len(candles) == 2
+    assert candles[0].open == 81000
+    assert candles[0].high == 81200
+    assert candles[0].low == 80800
+    assert candles[0].close == 81150

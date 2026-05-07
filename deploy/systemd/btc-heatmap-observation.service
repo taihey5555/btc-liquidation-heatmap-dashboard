@@ -1,0 +1,19 @@
+[Unit]
+Description=BTCUSDT Liquidation Heatmap observation job
+After=network-online.target btc-heatmap-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btcmap
+Group=btcmap
+WorkingDirectory=/opt/btc-liquidation-heatmap-dashboard/backend
+EnvironmentFile=/opt/btc-liquidation-heatmap-dashboard/.env
+ExecStart=/opt/btc-liquidation-heatmap-dashboard/backend/.venv/bin/python -m app.jobs.run_observation --symbol BTCUSDT --interval 60 --duration-hours 24
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

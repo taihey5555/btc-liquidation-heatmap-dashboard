@@ -39,6 +39,7 @@ def test_no_nan_or_infinity_in_live_heatmap_response(monkeypatch) -> None:
     assert all(math.isfinite(value) for value in numeric_values)
     assert all(0 <= bucket.total_score <= 1 for bucket in response.buckets)
     assert all(0 <= bucket.confidence <= 1 for bucket in response.buckets)
+    assert all(0 <= bucket.relative_intensity <= 1 for bucket in response.buckets)
 
 
 def test_model2_and_model3_fallback_without_extra_data() -> None:
@@ -48,6 +49,17 @@ def test_model2_and_model3_fallback_without_extra_data() -> None:
 
     assert len(buckets_1) == len(buckets_2) == len(buckets_3)
     assert all(0 <= bucket.confidence <= 1 for bucket in buckets_2 + buckets_3)
+
+
+def test_model2_uses_open_interest_delta_history() -> None:
+    previous = MarketSnapshot("binance", "BTCUSDT", 1759999900000, 80_000, 80_000, 10, 1_000_000_000, 0.0001, 1000, 80_000, None, {})
+    current = snapshot("binance", oi_usd=1_300_000_000, mark_price=82_000)
+    buckets_model1 = build_live_buckets([current], model=1, response_range="90d")
+    buckets_model2 = build_live_buckets([current], model=2, response_range="90d", historical_snapshots=[previous])
+
+    assert len(buckets_model2) >= len(buckets_model1)
+    assert max(bucket.confidence for bucket in buckets_model2) > max(bucket.confidence for bucket in buckets_model1)
+    assert max(bucket.relative_intensity for bucket in buckets_model2) > 0
 
 
 def test_currency_conversion_for_jpy(monkeypatch) -> None:
@@ -67,6 +79,16 @@ def test_heatmap_bucket_range_by_supported_ranges() -> None:
         assert buckets
         assert all(bucket.price_bucket > 0 for bucket in buckets)
         assert all(0 <= bucket.total_score <= 1 for bucket in buckets)
+        assert all(0 <= bucket.relative_intensity <= 1 for bucket in buckets)
+
+
+def test_relative_heatmap_fields_are_populated() -> None:
+    buckets = build_live_buckets([snapshot("binance", oi_usd=2_000_000), snapshot("bybit", oi_usd=1_500_000)], model=1, response_range="90d")
+
+    assert buckets
+    assert max(bucket.relative_intensity for bucket in buckets) > 0
+    assert {bucket.dominant_side for bucket in buckets}.issubset({"long", "short", "balanced"})
+    assert all(bucket.estimated_liq_usd == bucket.long_liq_usd + bucket.short_liq_usd for bucket in buckets)
 
 
 def test_exchange_weight_fallback_renormalizes_selected_exchanges() -> None:
@@ -86,6 +108,16 @@ def test_abnormal_open_interest_guard_excludes_extreme_values() -> None:
     assert len(weights) == 1
     assert weights[0].exchange == "binance"
     assert weights[0].weight == 1
+
+
+def test_abnormal_open_interest_guard_excludes_extreme_values_from_buckets() -> None:
+    normal = snapshot("binance", oi_usd=1_000_000, mark_price=80_000)
+    extreme = snapshot("mexc", oi_usd=9_650_627_368_195, mark_price=80_000)
+
+    buckets = build_live_buckets([normal, extreme], model=1, response_range="90d")
+
+    assert buckets
+    assert max(bucket.long_liq_usd + bucket.short_liq_usd for bucket in buckets) < 1_000_000_000
 
 
 def test_exchange_weight_skew_warning() -> None:

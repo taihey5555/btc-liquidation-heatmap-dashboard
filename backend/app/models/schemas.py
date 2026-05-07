@@ -41,6 +41,10 @@ class HeatmapBucket(BaseModel):
     short_liq_usd: float
     total_score: float
     confidence: float
+    relative_intensity: float = Field(default=0, ge=0, le=1)
+    dominant_side: str = "balanced"
+    estimated_liq_usd: float = 0
+    consumed_score: float = Field(default=0, ge=0, le=1)
 
 
 class HeatmapResponse(BaseModel):
@@ -51,9 +55,12 @@ class HeatmapResponse(BaseModel):
     source: str = "api-mock"
     fallback: bool = False
     exchanges_used: list[str] = []
+    excluded_exchanges: list[str] = []
     generated_at: int | None = None
     warnings: list[str] = []
     data_freshness_ms: int | None = None
+    current_price: float | None = None
+    current_price_source: str = "mock"
     display_price: str
     last_price_usd: float
     fx_usd_jpy: float
@@ -65,6 +72,33 @@ class HeatmapResponse(BaseModel):
     exchange_weights: list[ExchangeWeight]
 
 
+class SignalZone(BaseModel):
+    price: float
+    side: str
+    distance_pct: float
+    relative_intensity: float = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1)
+    consumed_score: float = Field(ge=0, le=1)
+    total_score: float = Field(ge=0, le=1)
+    estimated_liq_usd: float
+
+
+class LiquidationSignalResponse(BaseModel):
+    symbol: str
+    model: int
+    range: str
+    source: str
+    fallback: bool
+    current_price: float
+    generated_at: int | None = None
+    data_freshness_ms: int | None = None
+    exchanges_used: list[str] = []
+    warnings: list[str] = []
+    nearest_long_liq_below: list[SignalZone]
+    nearest_short_liq_above: list[SignalZone]
+    strongest_clusters: list[SignalZone]
+
+
 class ExchangeStatus(BaseModel):
     exchange: str
     enabled: bool
@@ -74,6 +108,7 @@ class ExchangeStatus(BaseModel):
     websocket_connected: bool = False
     websocket_last_message_ts: int | None = None
     websocket_last_error: str | None = None
+    websocket_status_reason: str | None = None
     data_fields_available: list[str] = []
 
 

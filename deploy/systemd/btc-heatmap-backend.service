@@ -1,0 +1,19 @@
+[Unit]
+Description=BTCUSDT Liquidation Heatmap FastAPI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btcmap
+Group=btcmap
+WorkingDirectory=/opt/btc-liquidation-heatmap-dashboard
+EnvironmentFile=/opt/btc-liquidation-heatmap-dashboard/.env
+ExecStart=/opt/btc-liquidation-heatmap-dashboard/backend/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
