@@ -99,6 +99,34 @@ class LiquidationSignalResponse(BaseModel):
     strongest_clusters: list[SignalZone]
 
 
+class TopClusterZone(BaseModel):
+    range: str
+    model: int
+    price: float
+    side: str
+    distance_pct: float
+    relative_intensity: float = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1)
+    consumed_score: float = Field(ge=0, le=1)
+    total_score: float = Field(ge=0, le=1)
+    estimated_liq_usd: float
+
+
+class TopClustersResponse(BaseModel):
+    symbol: str
+    source: str
+    fallback: bool
+    current_price: float
+    generated_at: int | None = None
+    data_freshness_ms: int | None = None
+    ranges: list[str]
+    exchanges_used: list[str] = []
+    warnings: list[str] = []
+    top_clusters: list[TopClusterZone]
+    nearest_long_liq_below: list[TopClusterZone]
+    nearest_short_liq_above: list[TopClusterZone]
+
+
 class ExchangeStatus(BaseModel):
     exchange: str
     enabled: bool

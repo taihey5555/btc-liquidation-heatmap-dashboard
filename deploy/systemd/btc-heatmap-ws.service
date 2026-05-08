@@ -1,0 +1,19 @@
+[Unit]
+Description=BTCUSDT Liquidation Heatmap liquidation WebSocket streams
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btcmap
+Group=btcmap
+WorkingDirectory=/opt/btc-liquidation-heatmap-dashboard/backend
+EnvironmentFile=/opt/btc-liquidation-heatmap-dashboard/.env
+ExecStart=/opt/btc-liquidation-heatmap-dashboard/.venv/bin/python -m app.jobs.run_liquidation_streams
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

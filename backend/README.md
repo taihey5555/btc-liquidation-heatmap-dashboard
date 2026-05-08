@@ -66,12 +66,15 @@ Observation Mode records live heatmap snapshots, fallback state, warnings, clust
 - `GET /api/exchanges/status`
 - `GET /api/liquidations/recent?symbol=BTCUSDT&limit=100`
 - `GET /api/observation/reports/latest`
+- `GET /api/signals/top-clusters?symbol=BTCUSDT&model=3&ranges=24h,3d&source=live&limit=10`
 
 `source=mock` always returns local mock data.
 
 `source=live` calls Binance and Bybit public REST market data. If one exchange fails, the API continues with the other exchange. If both fail, the response falls back to mock data with `fallback: true` and warnings.
 
 `/api/liquidations/recent` reads recently stored WebSocket liquidation events. If the stream job is not running or no events have arrived, it returns an empty list.
+
+`/api/signals/top-clusters` is the bot-facing read-only endpoint. It returns the strongest estimated liquidation clusters across one or more ranges, plus nearest long-liquidation zones below current price and nearest short-liquidation zones above current price. It never places orders.
 
 ## Model Data Flow
 
