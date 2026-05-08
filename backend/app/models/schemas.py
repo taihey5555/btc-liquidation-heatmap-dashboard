@@ -61,6 +61,9 @@ class HeatmapResponse(BaseModel):
     data_freshness_ms: int | None = None
     current_price: float | None = None
     current_price_source: str = "mock"
+    weighting_mode: str | None = None
+    weight_biases: dict[str, float] = Field(default_factory=dict)
+    weight_caps: dict[str, float] = Field(default_factory=dict)
     display_price: str
     last_price_usd: float
     fx_usd_jpy: float

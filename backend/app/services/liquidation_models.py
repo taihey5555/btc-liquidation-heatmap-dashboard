@@ -19,12 +19,15 @@ LIQUIDATION_BUFFER = 0.004
 MAX_REASONABLE_BTCUSDT_OI_USD = 50_000_000_000
 MIN_REASONABLE_BTCUSDT_OI_USD = 10_000
 CONSUMED_EVENT_WINDOW_MS = 45 * 60 * 1000
+BINANCE_WEIGHT_BIAS = 1.35
+BINANCE_WEIGHT_CAP = 0.60
+WEIGHTING_MODE = "oi_with_binance_bias"
 
 
 def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[ExchangeWeight]:
     eligible = [snapshot for snapshot in snapshots if is_reasonable_open_interest_usd(snapshot)]
-    total_oi = sum(max(0.0, snapshot.open_interest_usd) for snapshot in eligible)
-    if total_oi <= 0:
+    weights_by_exchange = calculate_exchange_weight_map(eligible)
+    if not weights_by_exchange:
         mock_weights = {"binance": 0.34, "bybit": 0.26, "okx": 0.18, "gate": 0.12, "mexc": 0.10}
         selected_total = sum(mock_weights.get(snapshot.exchange, 0.0) for snapshot in snapshots) or 1.0
         return [
@@ -38,12 +41,26 @@ def calculate_exchange_weights(snapshots: list[MarketSnapshot]) -> list[Exchange
     return [
         ExchangeWeight(
             exchange=snapshot.exchange,
-            weight=snapshot.open_interest_usd / total_oi,
+            weight=weights_by_exchange[snapshot.exchange],
             enabled=True,
             open_interest_usd=snapshot.open_interest_usd,
         )
         for snapshot in eligible
     ]
+
+
+def calculate_exchange_weight_map(snapshots: list[MarketSnapshot]) -> dict[str, float]:
+    eligible = [snapshot for snapshot in snapshots if is_reasonable_open_interest_usd(snapshot)]
+    total_oi = sum(max(0.0, snapshot.open_interest_usd) for snapshot in eligible)
+    if total_oi <= 0:
+        return {}
+
+    adjusted = {
+        snapshot.exchange: (snapshot.open_interest_usd / total_oi) * _exchange_weight_bias(snapshot.exchange)
+        for snapshot in eligible
+    }
+    normalized = _normalize_weights(adjusted)
+    return _cap_binance_weight(normalized)
 
 
 def is_reasonable_open_interest_usd(snapshot: MarketSnapshot) -> bool:
@@ -60,11 +77,18 @@ def is_reasonable_open_interest_usd(snapshot: MarketSnapshot) -> bool:
 def exchange_weight_warnings(weights: list[ExchangeWeight]) -> list[str]:
     warnings: list[str] = []
     total = sum(weight.weight for weight in weights)
+    total_oi = sum(
+        weight.open_interest_usd
+        for weight in weights
+        if weight.open_interest_usd is not None and math.isfinite(weight.open_interest_usd) and weight.open_interest_usd > 0
+    )
     if weights and abs(total - 1.0) > 0.001:
         warnings.append(f"exchange weights sum to {total:.4f}, expected 1.0")
     for weight in weights:
         if weight.weight >= 0.85 and len(weights) > 1:
             warnings.append(f"{weight.exchange} weight is unusually high at {weight.weight:.1%}; verify open_interest_usd unit")
+        if total_oi > 0 and weight.open_interest_usd is not None and weight.open_interest_usd / total_oi >= 0.90 and len(weights) > 1:
+            warnings.append(f"{weight.exchange} raw open_interest_usd share is unusually high at {weight.open_interest_usd / total_oi:.1%}; verify open_interest_usd unit")
     return warnings
 
 
@@ -92,12 +116,14 @@ def _build_model_1(snapshots: list[MarketSnapshot], response_range: str) -> list
     generated_at = int(time.time())
     eligible_snapshots = [snapshot for snapshot in snapshots if is_reasonable_open_interest_usd(snapshot)]
     working_snapshots = eligible_snapshots or [snapshot for snapshot in snapshots if _is_finite_positive(snapshot.mark_price)]
+    weight_map = calculate_exchange_weight_map(eligible_snapshots)
+    total_eligible_oi = sum(snapshot.open_interest_usd for snapshot in eligible_snapshots)
 
     for snapshot in working_snapshots:
         mark_price = _finite_positive(snapshot.mark_price)
         if mark_price <= 0:
             continue
-        oi_usd = _snapshot_notional(snapshot)
+        oi_usd = _snapshot_notional(snapshot, weight_map, total_eligible_oi)
         for leverage, share in LEVERAGE_DISTRIBUTION:
             notional = oi_usd * share
             long_price = mark_price * (1 - 1 / leverage + LIQUIDATION_BUFFER)
@@ -417,7 +443,9 @@ def _range_lookback_ms(response_range: str) -> int:
     return hours_by_range.get(normalized, 2160) * 60 * 60 * 1000
 
 
-def _snapshot_notional(snapshot: MarketSnapshot) -> float:
+def _snapshot_notional(snapshot: MarketSnapshot, weight_map: dict[str, float] | None = None, total_eligible_oi: float = 0.0) -> float:
+    if weight_map and snapshot.exchange in weight_map and total_eligible_oi > 0:
+        return total_eligible_oi * weight_map[snapshot.exchange]
     if is_reasonable_open_interest_usd(snapshot):
         return snapshot.open_interest_usd
     # If an exchange reports OI in contracts or an already-notional unit, a
@@ -443,6 +471,35 @@ def _finite_positive(value: float) -> float:
 
 def _is_finite_positive(value: float) -> bool:
     return math.isfinite(value) and value > 0
+
+
+def _exchange_weight_bias(exchange: str) -> float:
+    return BINANCE_WEIGHT_BIAS if exchange.lower() == "binance" else 1.0
+
+
+def _normalize_weights(weights: dict[str, float]) -> dict[str, float]:
+    total = sum(value for value in weights.values() if math.isfinite(value) and value > 0)
+    if total <= 0:
+        return {}
+    return {exchange: max(0.0, value) / total for exchange, value in weights.items() if math.isfinite(value) and value > 0}
+
+
+def _cap_binance_weight(weights: dict[str, float]) -> dict[str, float]:
+    binance_weight = weights.get("binance")
+    if binance_weight is None or binance_weight <= BINANCE_WEIGHT_CAP:
+        return weights
+
+    other_total = sum(weight for exchange, weight in weights.items() if exchange != "binance")
+    capped = {"binance": BINANCE_WEIGHT_CAP}
+    remaining = 1.0 - BINANCE_WEIGHT_CAP
+    if other_total <= 0:
+        return {"binance": 1.0}
+
+    for exchange, weight in weights.items():
+        if exchange == "binance":
+            continue
+        capped[exchange] = remaining * (weight / other_total)
+    return capped
 
 
 def _base_confidence(snapshots: list[MarketSnapshot]) -> float:

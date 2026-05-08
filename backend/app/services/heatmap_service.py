@@ -6,7 +6,14 @@ from app.exchanges.base import CandleSnapshot, MarketSnapshot
 from app.config import get_settings
 from app.models.schemas import Candle, HeatBand, HeatmapBucket, HeatmapResponse, NetPoint, ProfileRow
 from app.services.collector import collect_market_data
-from app.services.liquidation_models import build_live_buckets, calculate_exchange_weights, exchange_weight_warnings
+from app.services.liquidation_models import (
+    BINANCE_WEIGHT_BIAS,
+    BINANCE_WEIGHT_CAP,
+    WEIGHTING_MODE,
+    build_live_buckets,
+    calculate_exchange_weights,
+    exchange_weight_warnings,
+)
 from app.services.liquidation_streams import get_recent_liquidations
 from app.services.market_history import get_latest_market_snapshot, get_recent_market_snapshots
 from app.services.mock_heatmap import FX_USD_JPY, build_mock_heatmap, build_profile, clamp
@@ -85,6 +92,9 @@ async def get_live_heatmap(symbol: str, model: int, currency: str, response_rang
         data_freshness_ms=collector_result.data_freshness_ms,
         current_price=last_price,
         current_price_source=current_price_source,
+        weighting_mode=WEIGHTING_MODE,
+        weight_biases={"binance": BINANCE_WEIGHT_BIAS},
+        weight_caps={"binance": BINANCE_WEIGHT_CAP},
         display_price=display_price,
         last_price_usd=last_price,
         fx_usd_jpy=FX_USD_JPY,
