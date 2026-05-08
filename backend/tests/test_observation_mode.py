@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from app.database import create_schema, get_connection
 from app.main import app
 from app.models.schemas import HeatmapBucket
+from app.models.schemas import TopClustersResponse, TopClusterZone
+from app.services.bot_threshold_report import generate_bot_threshold_report
 from app.services.mock_heatmap import build_mock_heatmap
 from app.services.observation import (
     create_observation_run,
@@ -102,3 +104,79 @@ def test_observation_api_endpoints(tmp_path, monkeypatch) -> None:
     assert client.get("/api/observation/anomalies?run_id=latest").status_code == 200
     assert client.get("/api/observation/clusters?run_id=latest").status_code == 200
     assert get_latest_report() is not None
+
+
+def test_bot_threshold_report_generation(tmp_path, monkeypatch) -> None:
+    setup_tmp_db(tmp_path, monkeypatch)
+    now_ms = 1_760_000_000_000
+    with get_connection(tmp_path / "heatmap.db") as connection:
+        for index in range(12):
+            connection.execute(
+                """
+                INSERT INTO market_snapshots (
+                    exchange, symbol, ts, mark_price, index_price, open_interest,
+                    open_interest_usd, funding_rate, volume_24h, raw_json
+                ) VALUES (?, 'BTCUSDT', ?, 80000, 80000, 100, 500000000, 0.001, 1000, '{}')
+                """,
+                ("binance" if index % 2 == 0 else "bybit", now_ms + index * 60_000),
+            )
+        connection.execute(
+            """
+            INSERT INTO oi_delta_buckets (
+                exchange, symbol, ts, price_bucket, side, oi_delta_usd,
+                score, confidence, source_snapshot_ts, previous_snapshot_ts, raw_json
+            ) VALUES ('binance', 'BTCUSDT', ?, 79000, 'long', 250000000, 0.84, 0.78, ?, ?, '{}')
+            """,
+            (now_ms, now_ms, now_ms - 60_000),
+        )
+        connection.execute(
+            """
+            INSERT INTO liquidation_events (
+                exchange, symbol, ts, side, price, quantity, notional_usd, event_hash, raw_json
+            ) VALUES ('binance', 'BTCUSDT', ?, 'long_liquidated', 79200, 2, 158400, 'x', '{}')
+            """,
+            (now_ms,),
+        )
+        connection.commit()
+
+    async def fetcher(**_kwargs):
+        return TopClustersResponse(
+            symbol="BTCUSDT",
+            source="live",
+            fallback=False,
+            current_price=80_000,
+            generated_at=1_760_000_000,
+            data_freshness_ms=500,
+            ranges=["24h", "3d"],
+            exchanges_used=["binance", "bybit"],
+            warnings=[],
+            top_clusters=[
+                TopClusterZone(range="24h", model=3, price=79_000, side="long", distance_pct=-1.25, relative_intensity=0.8, confidence=0.77, consumed_score=0.1, total_score=0.9, estimated_liq_usd=900_000_000),
+                TopClusterZone(range="3d", model=3, price=82_000, side="short", distance_pct=2.5, relative_intensity=0.7, confidence=0.72, consumed_score=0.0, total_score=0.82, estimated_liq_usd=700_000_000),
+            ],
+            nearest_long_liq_below=[],
+            nearest_short_liq_above=[],
+        )
+
+    report = asyncio.run(generate_bot_threshold_report(cluster_fetcher=fetcher, persist=True))
+
+    assert report["threshold_candidates"]["recommended_env"]["LIQ_HEATMAP_MODEL"] == "3"
+    assert report["threshold_candidates"]["profiles"]["balanced"]["min_intensity"] >= 0.22
+    assert report["threshold_candidates"]["profiles"]["balanced"]["min_estimated_liq_usd"] >= 150_000_000
+    assert report["observation_report_id"] > 0
+    assert "Bot Threshold Report" in report["markdown"]
+
+
+def test_bot_threshold_report_api_endpoint(tmp_path, monkeypatch) -> None:
+    setup_tmp_db(tmp_path, monkeypatch)
+
+    async def fake_report(**_kwargs):
+        return {"symbol": "BTCUSDT", "threshold_candidates": {"profiles": {"balanced": {"min_intensity": 0.3}}}, "markdown": "ok"}
+
+    monkeypatch.setattr("app.routers.observation.generate_bot_threshold_report", fake_report)
+    client = TestClient(app)
+
+    response = client.get("/api/observation/reports/bot-thresholds?symbol=BTCUSDT&lookback_hours=24")
+
+    assert response.status_code == 200
+    assert response.json()["threshold_candidates"]["profiles"]["balanced"]["min_intensity"] == 0.3
