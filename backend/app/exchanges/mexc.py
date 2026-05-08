@@ -58,17 +58,19 @@ class MexcAdapter:
     async def get_open_interest(self, symbol: str) -> OpenInterestSnapshot:
         normalized = self.normalize_symbol(symbol)
         item = await self._ticker(normalized)
+        detail = await self._contract_detail(normalized)
         fair_price = to_float(item.get("fairPrice"), to_float(item.get("lastPrice")))
         hold_vol = to_float(item.get("holdVol"))
-        # MEXC holdVol is contract holdings. For this MVP, BTC_USDT is treated
-        # as BTC-sized linear notional when direct contract size is unavailable.
+        contract_size = to_float(detail.get("contractSize"), 1.0)
+        # MEXC holdVol is contract count, not BTC amount. BTC_USDT contractSize
+        # is currently 0.0001 BTC, so USD OI is contracts * contractSize * price.
         return OpenInterestSnapshot(
             exchange=self.name,
             symbol=normalized,
             ts=to_int(item.get("timestamp"), int(time.time() * 1000)) or int(time.time() * 1000),
             open_interest=hold_vol,
-            open_interest_usd=hold_vol * fair_price,
-            raw_json=item,
+            open_interest_usd=hold_vol * contract_size * fair_price,
+            raw_json={"ticker": item, "detail": detail},
         )
 
     async def get_funding_rate(self, symbol: str) -> FundingRateSnapshot:
@@ -99,10 +101,12 @@ class MexcAdapter:
     async def get_market_snapshot(self, symbol: str) -> MarketSnapshot:
         normalized = self.normalize_symbol(symbol)
         ticker = await self._ticker(normalized)
+        detail = await self._contract_detail(normalized)
         funding = await self.get_funding_rate(normalized)
         fair_price = to_float(ticker.get("fairPrice"), to_float(ticker.get("lastPrice")))
         index_price = to_float(ticker.get("indexPrice"), fair_price)
         hold_vol = to_float(ticker.get("holdVol"))
+        contract_size = to_float(detail.get("contractSize"), 1.0)
         return MarketSnapshot(
             exchange=self.name,
             symbol=normalized,
@@ -110,12 +114,12 @@ class MexcAdapter:
             mark_price=fair_price,
             index_price=index_price,
             open_interest=hold_vol,
-            open_interest_usd=hold_vol * fair_price,
+            open_interest_usd=hold_vol * contract_size * fair_price,
             funding_rate=funding.funding_rate or to_float(ticker.get("fundingRate")),
             volume_24h=to_float(ticker.get("volume24")),
             last_price=to_float(ticker.get("lastPrice"), fair_price),
             next_funding_time=funding.next_funding_time,
-            raw_json={"ticker": ticker, "funding": funding.raw_json},
+            raw_json={"ticker": ticker, "detail": detail, "funding": funding.raw_json},
         )
 
     async def _ticker(self, normalized_symbol: str) -> dict:
@@ -126,6 +130,16 @@ class MexcAdapter:
                 if item.get("symbol") == normalized_symbol:
                     return item
             raise RuntimeError(f"MEXC ticker missing {normalized_symbol}")
+        return data
+
+    async def _contract_detail(self, normalized_symbol: str) -> dict:
+        payload = await self._get("/api/v1/contract/detail", {"symbol": normalized_symbol})
+        data = payload.get("data", {})
+        if isinstance(data, list):
+            for item in data:
+                if item.get("symbol") == normalized_symbol:
+                    return item
+            raise RuntimeError(f"MEXC contract detail missing {normalized_symbol}")
         return data
 
 

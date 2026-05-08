@@ -33,6 +33,8 @@ class FakeClient:
                     },
                 }
             )
+        if path == "/api/v1/contract/detail":
+            return FakeResponse({"success": True, "data": {"symbol": "BTC_USDT", "contractSize": 0.0001}})
         if path == "/api/v1/contract/funding_rate/BTC_USDT":
             return FakeResponse({"success": True, "data": {"fundingRate": 0.0002, "nextSettleTime": 1760000800000, "timestamp": 1760000000100}})
         if path == "/api/v1/contract/depth/BTC_USDT":
@@ -48,7 +50,7 @@ def test_mexc_market_snapshot_normalization() -> None:
     assert snapshot.mark_price == 82005
     assert snapshot.index_price == 81995
     assert snapshot.open_interest == 1200
-    assert snapshot.open_interest_usd == 98406000
+    assert snapshot.open_interest_usd == 9840.6
     assert snapshot.funding_rate == 0.0002
 
 

@@ -20,6 +20,8 @@ MIN_DELTA_USD = 25_000
 MIN_DELTA_RATIO = 0.00002
 MAX_DELTA_RATIO = 0.03
 DEFAULT_BUCKET_SIZE = 250
+MIN_REASONABLE_BTCUSDT_OI_USD = 10_000
+MAX_REASONABLE_BTCUSDT_OI_USD = 50_000_000_000
 
 
 @dataclass(frozen=True)
@@ -85,7 +87,7 @@ def build_oi_delta_buckets(current: MarketSnapshot, previous: MarketSnapshot | N
         return []
     if not (_finite_positive(current.mark_price) and _finite_positive(previous.mark_price)):
         return []
-    if not (_finite_positive(current.open_interest_usd) and _finite_positive(previous.open_interest_usd)):
+    if not (_reasonable_open_interest_usd(current) and _reasonable_open_interest_usd(previous)):
         return []
 
     delta_usd = current.open_interest_usd - previous.open_interest_usd
@@ -202,5 +204,16 @@ def _bucket_price(price: float, bucket_size: int) -> float:
     return round(price / bucket_size) * bucket_size
 
 
-def _finite_positive(value: float) -> bool:
-    return math.isfinite(value) and value > 0
+def _finite_positive(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value > 0
+
+
+def _reasonable_open_interest_usd(snapshot: MarketSnapshot) -> bool:
+    value = snapshot.open_interest_usd
+    if not _finite_positive(value):
+        return False
+    if value < MIN_REASONABLE_BTCUSDT_OI_USD or value > MAX_REASONABLE_BTCUSDT_OI_USD:
+        return False
+    if _finite_positive(snapshot.mark_price) and value < snapshot.mark_price * 0.01:
+        return False
+    return True

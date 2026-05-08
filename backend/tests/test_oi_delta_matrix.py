@@ -48,6 +48,13 @@ def test_build_oi_delta_buckets_records_realistic_minute_delta() -> None:
     assert sum(bucket.oi_delta_usd for bucket in buckets) > 1_000_000
 
 
+def test_build_oi_delta_buckets_rejects_abnormal_open_interest_unit() -> None:
+    previous = snapshot(exchange="mexc", ts=1760000000000, price=80_000, oi_usd=58_000_000_000_000)
+    current = snapshot(exchange="mexc", ts=1760000060000, price=80_200, oi_usd=59_000_000_000_000)
+
+    assert build_oi_delta_buckets(current, previous) == []
+
+
 def test_record_and_read_oi_delta_buckets(tmp_path, monkeypatch) -> None:
     database_path = tmp_path / "heatmap.db"
 
