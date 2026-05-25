@@ -74,7 +74,7 @@ def test_currency_conversion_for_jpy(monkeypatch) -> None:
 
 
 def test_heatmap_bucket_range_by_supported_ranges() -> None:
-    for response_range in ["12h", "24h", "3d", "7d", "30d", "90d", "180d", "1y"]:
+    for response_range in ["12h", "24h", "3d", "7d", "2w", "30d", "1m", "3m", "90d", "6m", "180d", "1y", "2y"]:
         buckets = build_live_buckets([snapshot("binance")], model=1, response_range=response_range)
         assert buckets
         assert all(bucket.price_bucket > 0 for bucket in buckets)

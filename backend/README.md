@@ -66,7 +66,7 @@ Observation Mode records live heatmap snapshots, fallback state, warnings, clust
 - `GET /api/exchanges/status`
 - `GET /api/liquidations/recent?symbol=BTCUSDT&limit=100`
 - `GET /api/observation/reports/latest`
-- `GET /api/signals/top-clusters?symbol=BTCUSDT&model=3&ranges=24h,3d&source=live&limit=10`
+- `GET /api/signals/top-clusters?symbol=BTCUSDT&model=3&ranges=24h,3d,7d,2w,1m,3m,6m,1y,2y&source=live&limit=10`
 
 `source=mock` always returns local mock data.
 
@@ -82,7 +82,7 @@ Observation Mode records live heatmap snapshots, fallback state, warnings, clust
 - Model 2 adds `market_snapshots` history and persisted `oi_delta_buckets`. OI increases are mapped to estimated long or short liquidation zones based on price direction, then decayed by range.
 - Model 3 starts from Model 2, adds funding skew, and lightly adjusts buckets using real liquidation events. Executed liquidations can also consume nearby bands so old bright levels fade after they are hit.
 
-Range-specific behavior is intentionally different: 12h/24h uses tighter buckets and shorter OI delta lookback; 3d/7d uses medium aggregation; 30d+ uses longer lookback with stronger time decay.
+Range-specific behavior is intentionally different: 12h/24h uses tighter buckets and shorter OI delta lookback; 3d/7d uses medium aggregation; 2w/1m/3m/6m/1y/2y are intended for swing and macro liquidity context rather than immediate entry triggers.
 
 ## Test
 

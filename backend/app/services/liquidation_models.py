@@ -19,6 +19,9 @@ LIQUIDATION_BUFFER = 0.004
 MAX_REASONABLE_BTCUSDT_OI_USD = 50_000_000_000
 MIN_REASONABLE_BTCUSDT_OI_USD = 10_000
 CONSUMED_EVENT_WINDOW_MS = 45 * 60 * 1000
+CONSUMED_BUCKET_DISTANCE_FACTOR = 1.35
+MAX_CONSUMED_LIQ_DECAY = 0.44
+MAX_CONSUMED_SCORE_DECAY = 0.26
 BINANCE_WEIGHT_BIAS = 1.35
 BINANCE_WEIGHT_CAP = 0.60
 WEIGHTING_MODE = "oi_with_binance_bias"
@@ -357,6 +360,9 @@ def _adjust_model_3(buckets: list[HeatmapBucket], snapshots: list[MarketSnapshot
             dominant_side=_dominant_side(bucket.long_liq_usd * long_factor, bucket.short_liq_usd * short_factor),
             estimated_liq_usd=bucket.long_liq_usd * long_factor + bucket.short_liq_usd * short_factor,
             consumed_score=bucket.consumed_score,
+            recent_liq_notional_usd=bucket.recent_liq_notional_usd,
+            recent_liq_event_count=bucket.recent_liq_event_count,
+            last_liq_event_ts=bucket.last_liq_event_ts,
         )
         for bucket in buckets
     ]
@@ -370,14 +376,35 @@ def _apply_consumed_decay(buckets: list[HeatmapBucket], liquidation_events: list
         return buckets
     decayed: list[HeatmapBucket] = []
     for bucket in buckets:
-        long_consumed = consumed.get((bucket.price_bucket, "long_liquidated"), 0.0)
-        short_consumed = consumed.get((bucket.price_bucket, "short_liquidated"), 0.0)
-        long_factor = 1.0 - min(0.68, long_consumed * 0.58)
-        short_factor = 1.0 - min(0.68, short_consumed * 0.58)
+        long_consumed = consumed.get((bucket.price_bucket, "long_liquidated"), {})
+        short_consumed = consumed.get((bucket.price_bucket, "short_liquidated"), {})
+        long_score = float(long_consumed.get("score", 0.0))
+        short_score = float(short_consumed.get("score", 0.0))
+        long_factor = 1.0 - min(MAX_CONSUMED_LIQ_DECAY, long_score * 0.42)
+        short_factor = 1.0 - min(MAX_CONSUMED_LIQ_DECAY, short_score * 0.42)
         long_liq_usd = bucket.long_liq_usd * long_factor
         short_liq_usd = bucket.short_liq_usd * short_factor
-        consumed_score = clamp(max(long_consumed, short_consumed, bucket.consumed_score), 0, 1)
-        total_factor = 1.0 - consumed_score * 0.36
+        consumed_score = clamp(max(long_score, short_score, bucket.consumed_score), 0, 1)
+        total_factor = 1.0 - min(MAX_CONSUMED_SCORE_DECAY, consumed_score * 0.26)
+        recent_liq_notional_usd = (
+            bucket.recent_liq_notional_usd
+            + float(long_consumed.get("notional_usd", 0.0))
+            + float(short_consumed.get("notional_usd", 0.0))
+        )
+        recent_liq_event_count = (
+            bucket.recent_liq_event_count
+            + int(long_consumed.get("event_count", 0))
+            + int(short_consumed.get("event_count", 0))
+        )
+        event_timestamps = [
+            ts
+            for ts in (
+                bucket.last_liq_event_ts,
+                long_consumed.get("last_event_ts"),
+                short_consumed.get("last_event_ts"),
+            )
+            if ts is not None
+        ]
         decayed.append(
             HeatmapBucket(
                 ts=bucket.ts,
@@ -390,29 +417,54 @@ def _apply_consumed_decay(buckets: list[HeatmapBucket], liquidation_events: list
                 dominant_side=_dominant_side(long_liq_usd, short_liq_usd),
                 estimated_liq_usd=long_liq_usd + short_liq_usd,
                 consumed_score=consumed_score,
+                recent_liq_notional_usd=recent_liq_notional_usd,
+                recent_liq_event_count=recent_liq_event_count,
+                last_liq_event_ts=max(event_timestamps) if event_timestamps else None,
             )
         )
     return decayed
 
 
-def _consumed_scores(buckets: list[HeatmapBucket], liquidation_events: list[LiquidationEvent]) -> dict[tuple[float, str], float]:
+def _consumed_scores(buckets: list[HeatmapBucket], liquidation_events: list[LiquidationEvent]) -> dict[tuple[float, str], dict[str, float | int]]:
     bucket_prices = [bucket.price_bucket for bucket in buckets]
+    bucket_size = _infer_bucket_size(bucket_prices)
+    max_distance = max(bucket_size * CONSUMED_BUCKET_DISTANCE_FACTOR, 1.0)
     now_ms = int(time.time() * 1000)
-    max_event_notional = max((event.notional_usd for event in liquidation_events if event.notional_usd > 0), default=1.0)
-    scores: dict[tuple[float, str], float] = {}
+    max_event_notional = max((event.notional_usd for event in liquidation_events if event.notional_usd and event.notional_usd > 0), default=1.0)
+    scores: dict[tuple[float, str], dict[str, float | int]] = {}
     for event in liquidation_events:
         if event.side not in {"long_liquidated", "short_liquidated"}:
+            continue
+        if not _is_finite_positive(event.price) or not _is_finite_positive(event.notional_usd):
             continue
         age_ms = max(0, now_ms - event.ts)
         if age_ms > CONSUMED_EVENT_WINDOW_MS:
             continue
         nearest = min(bucket_prices, key=lambda price: abs(price - event.price))
+        distance = abs(nearest - event.price)
+        if distance > max_distance:
+            continue
         recency = 1.0 - age_ms / CONSUMED_EVENT_WINDOW_MS
+        distance_score = 1.0 - min(distance / max_distance, 1.0)
         notional_score = min(event.notional_usd / max_event_notional, 1.0)
-        score = clamp(0.22 + recency * 0.48 + notional_score * 0.30, 0, 1)
+        score = clamp(0.10 + recency * 0.38 + distance_score * 0.24 + notional_score * 0.28, 0, 1)
         key = (nearest, event.side)
-        scores[key] = clamp(scores.get(key, 0.0) + score * 0.72, 0, 1)
+        previous = scores.get(key, {"score": 0.0, "notional_usd": 0.0, "event_count": 0, "last_event_ts": 0})
+        scores[key] = {
+            "score": clamp(float(previous["score"]) + score * 0.58, 0, 1),
+            "notional_usd": float(previous["notional_usd"]) + event.notional_usd,
+            "event_count": int(previous["event_count"]) + 1,
+            "last_event_ts": max(int(previous["last_event_ts"]), event.ts),
+        }
     return scores
+
+
+def _infer_bucket_size(bucket_prices: list[float]) -> float:
+    sorted_prices = sorted(set(bucket_prices))
+    if len(sorted_prices) < 2:
+        return 250.0
+    gaps = [abs(b - a) for a, b in zip(sorted_prices, sorted_prices[1:]) if abs(b - a) > 0]
+    return min(gaps) if gaps else 250.0
 
 
 def _bucket_price(price: float, bucket_size: int) -> float:
@@ -423,8 +475,10 @@ def _bucket_size_for_range(response_range: str) -> int:
     normalized = response_range.lower()
     if normalized in {"12h", "24h"}:
         return 100
-    if normalized in {"3d", "7d", "30d"}:
+    if normalized in {"3d", "7d", "2w", "14d", "30d", "1m"}:
         return 250
+    if normalized in {"3m", "90d", "6m", "180d"}:
+        return 500
     return 500
 
 
@@ -435,10 +489,16 @@ def _range_lookback_ms(response_range: str) -> int:
         "24h": 24,
         "3d": 72,
         "7d": 168,
+        "2w": 336,
+        "14d": 336,
         "30d": 720,
+        "1m": 720,
+        "3m": 2160,
         "90d": 2160,
+        "6m": 4320,
         "180d": 4320,
         "1y": 8760,
+        "2y": 17520,
     }
     return hours_by_range.get(normalized, 2160) * 60 * 60 * 1000
 

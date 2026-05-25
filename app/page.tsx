@@ -30,6 +30,13 @@ type HeatBand = {
   start: number;
   end: number;
   intensity: number;
+  dominantSide?: string;
+  estimatedLiqUsd?: number;
+  confidence?: number;
+  relativeIntensity?: number;
+  consumedScore?: number;
+  recentLiqNotionalUsd?: number;
+  recentLiqEventCount?: number;
 };
 
 type ProfileRow = {
@@ -52,10 +59,15 @@ const rangeTickLabels: Record<string, string[]> = {
   "24H": ["-24h", "-20h", "-16h", "-12h", "-8h", "-4h", "now"],
   "3D": ["-3d", "-60h", "-48h", "-36h", "-24h", "-12h", "now"],
   "7D": ["-7d", "-6d", "-5d", "-4d", "-3d", "-2d", "-1d", "now"],
+  "2W": ["-14d", "-12d", "-10d", "-8d", "-6d", "-4d", "-2d", "now"],
   "30D": ["-30d", "-25d", "-20d", "-15d", "-10d", "-5d", "now"],
+  "1M": ["-1m", "-25d", "-20d", "-15d", "-10d", "-5d", "now"],
+  "3M": ["-3m", "-75d", "-60d", "-45d", "-30d", "-15d", "now"],
   "90D": ["-90d", "-75d", "-60d", "-45d", "-30d", "-15d", "now"],
+  "6M": ["-6m", "-5m", "-4m", "-3m", "-2m", "-1m", "now"],
   "180D": ["-180d", "-150d", "-120d", "-90d", "-60d", "-30d", "now"],
   "1Y": ["-1y", "-10m", "-8m", "-6m", "-4m", "-2m", "now"],
+  "2Y": ["-2y", "-20m", "-16m", "-12m", "-8m", "-4m", "now"],
 };
 
 function seededNoise(index: number) {
@@ -88,8 +100,11 @@ function rangeProfile(range: string) {
   if (normalized === "24H") return { volatility: 0.72, driftScale: 0.6 };
   if (normalized === "3D") return { volatility: 0.9, driftScale: 0.78 };
   if (normalized === "7D") return { volatility: 1.08, driftScale: 0.95 };
-  if (normalized === "30D") return { volatility: 1.22, driftScale: 1.12 };
-  if (normalized === "180D" || normalized === "1Y") return { volatility: 1.48, driftScale: 1.38 };
+  if (normalized === "2W") return { volatility: 1.16, driftScale: 1.04 };
+  if (normalized === "30D" || normalized === "1M") return { volatility: 1.22, driftScale: 1.12 };
+  if (normalized === "3M") return { volatility: 1.36, driftScale: 1.26 };
+  if (normalized === "180D" || normalized === "6M" || normalized === "1Y") return { volatility: 1.48, driftScale: 1.38 };
+  if (normalized === "2Y") return { volatility: 1.58, driftScale: 1.5 };
   return { volatility: 1.32, driftScale: 1.24 };
 }
 
@@ -99,9 +114,12 @@ function rangeWindow(range: string) {
   if (normalized === "24H") return 5_000;
   if (normalized === "3D") return 7_000;
   if (normalized === "7D") return 9_000;
-  if (normalized === "30D") return 10_000;
-  if (normalized === "180D") return 18_000;
+  if (normalized === "2W") return 10_000;
+  if (normalized === "30D" || normalized === "1M") return 10_000;
+  if (normalized === "3M") return 14_000;
+  if (normalized === "180D" || normalized === "6M") return 18_000;
   if (normalized === "1Y") return 24_000;
+  if (normalized === "2Y") return 32_000;
   return 12_000;
 }
 
@@ -177,6 +195,13 @@ function buildRelativeBandsFromBuckets(buckets: HeatmapResponse["buckets"]): Hea
         start,
         end,
         intensity,
+        dominantSide: bucket.dominant_side,
+        estimatedLiqUsd: bucket.estimated_liq_usd,
+        confidence: bucket.confidence,
+        relativeIntensity: bucket.relative_intensity,
+        consumedScore: bucket.consumed_score,
+        recentLiqNotionalUsd: bucket.recent_liq_notional_usd,
+        recentLiqEventCount: bucket.recent_liq_event_count,
       };
     });
   });
@@ -233,17 +258,36 @@ function formatEventTime(ts: number | null | undefined) {
   return new Date(ts).toLocaleTimeString("ja-JP", { hour12: false });
 }
 
-function formatCompactUsd(value: number) {
+function formatPrice(value: number, currency: "USD" | "JPY", fxUsdJpy: number, compact = false) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  if (currency === "JPY") {
+    const jpyValue = value * fxUsdJpy;
+    if (compact && Math.abs(jpyValue) >= 1_000_000) {
+      return `¥${(jpyValue / 1_000_000).toFixed(jpyValue >= 10_000_000 ? 1 : 2)}M`;
+    }
+    return `¥${Math.round(jpyValue).toLocaleString("ja-JP")}`;
+  }
+  if (compact && Math.abs(value) >= 1_000) {
+    return `$${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
+  }
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+function formatMoneyFromUsd(value: number, currency: "USD" | "JPY", fxUsdJpy: number) {
   if (!Number.isFinite(value) || value <= 0) {
-    return "$0";
+    return currency === "JPY" ? "¥0 est." : "$0 est.";
   }
-  if (value >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(2)}B est.`;
+  const converted = currency === "JPY" ? value * fxUsdJpy : value;
+  const prefix = currency === "JPY" ? "¥" : "$";
+  if (converted >= 1_000_000_000) {
+    return `${prefix}${(converted / 1_000_000_000).toFixed(2)}B est.`;
   }
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M est.`;
+  if (converted >= 1_000_000) {
+    return `${prefix}${(converted / 1_000_000).toFixed(1)}M est.`;
   }
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })} est.`;
+  return `${prefix}${converted.toLocaleString(currency === "JPY" ? "ja-JP" : "en-US", { maximumFractionDigits: 0 })} est.`;
 }
 
 function uniqueMessages(messages: string[]) {
@@ -275,6 +319,8 @@ export default function Home() {
   const [observationRun, setObservationRun] = useState<ApiObservationRun | null>(null);
   const [observationReport, setObservationReport] = useState<ApiObservationReport | null>(null);
   const [observationAnomalies, setObservationAnomalies] = useState<ApiObservationAnomaly[]>([]);
+  const [hoveredBand, setHoveredBand] = useState<HeatBand | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number } | null>(null);
   const enabledExchangeKey = enabledExchanges.join(",");
   const timeTicks = rangeTickLabels[range] ?? rangeTickLabels["90D"];
   const mockCandles = useMemo(() => buildCandles(range), [range]);
@@ -340,13 +386,13 @@ export default function Home() {
   const last = candles[candles.length - 1].close;
   const currentPriceY = yForPrice(last, priceMin, priceMax);
   const fx = 157;
+  const fxUsdJpy = activeLiveData?.fx_usd_jpy ?? apiData?.fx_usd_jpy ?? fx;
   const priceLabel = isLiveInitialLoading
     ? "Loading live..."
     : useApiData
-    ? activeLiveData.display_price
-    : currency === "USD"
-      ? `$${last.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-      : `¥${Math.round(last * fx).toLocaleString("ja-JP")}`;
+    ? formatPrice(activeLiveData.last_price_usd, currency, fxUsdJpy)
+    : formatPrice(last, currency, fxUsdJpy);
+  const currentPriceDetailLabel = isLiveInitialLoading ? "waiting for live price" : `${formatPrice(last, currency, fxUsdJpy)} BTCUSDT`;
   const dataStatusLabel = dataMode === "mock" ? "mock" : apiStatus === "idle" ? "live loading" : apiStatus === "ready" ? (apiData?.fallback ? "fallback mock" : "live") : "mock fallback";
   const generatedAtLabel = apiData?.generated_at ? new Date(apiData.generated_at * 1000).toLocaleTimeString("ja-JP", { hour12: false }) : "-";
   const refreshLabel = lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString("ja-JP", { hour12: false }) : "-";
@@ -369,6 +415,22 @@ export default function Home() {
       }
       return [...current, exchange];
     });
+  };
+  const describeBand = (band: HeatBand) => {
+    const side = band.dominantSide ?? "relative";
+    const strength = Math.round((band.relativeIntensity ?? band.intensity) * 100);
+    const estimate = formatMoneyFromUsd(band.estimatedLiqUsd ?? 0, currency, fxUsdJpy);
+    const confidence = band.confidence === undefined ? "mock" : `${Math.round(band.confidence * 100)}%`;
+    return {
+      price: formatPrice(band.price, currency, fxUsdJpy),
+      side,
+      strength,
+      estimate,
+      confidence,
+      consumed: Math.round((band.consumedScore ?? 0) * 100),
+      events: band.recentLiqEventCount ?? 0,
+      eventNotional: formatMoneyFromUsd(band.recentLiqNotionalUsd ?? 0, currency, fxUsdJpy),
+    };
   };
 
   useEffect(() => {
@@ -482,7 +544,7 @@ export default function Home() {
             <Segmented label="Source" value={dataMode.toUpperCase()} items={["MOCK", "LIVE"]} onSelect={(value) => setDataMode(value.toLowerCase() as DataMode)} />
           ) : null}
           <Segmented label="Model" value={`Model ${model}`} items={["Model 1", "Model 2", "Model 3"]} onSelect={(value) => setModel(Number(value.slice(-1)))} />
-          <Segmented label="Range" value={range} items={["12H", "24H", "3D", "7D", "30D", "90D", "180D", "1Y"]} onSelect={setRange} />
+          <Segmented label="Range" value={range} items={["12H", "24H", "3D", "7D", "2W", "1M", "3M", "6M", "1Y", "2Y"]} onSelect={setRange} />
           <Segmented label="Currency" value={currency} items={["USD", "JPY"]} onSelect={(value) => setCurrency(value as "USD" | "JPY")} />
           <label className="threshold">
             <span>Threshold</span>
@@ -503,7 +565,7 @@ export default function Home() {
         </div>
         <div>
           <span>Strongest Cluster</span>
-          <strong>{strongestCluster ? `${Math.round(strongestCluster.relative_intensity * 100)}% @ ${strongestCluster.price_bucket.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "-"}</strong>
+          <strong>{strongestCluster ? `${Math.round(strongestCluster.relative_intensity * 100)}% @ ${formatPrice(strongestCluster.price_bucket, currency, fxUsdJpy, true)}` : "-"}</strong>
         </div>
         <div>
           <span>Range</span>
@@ -600,9 +662,36 @@ export default function Home() {
                   const bandHeight = 3.2 + band.intensity * 5.2;
                   const y = yForPrice(band.price, priceMin, priceMax) - bandHeight / 2;
                   const width = xForIndex(band.end, 244) - x;
-                  return <rect key={`${band.price}-${index}`} x={x} y={y} width={width} height={bandHeight} fill={heatColor(band.intensity)} />;
+                  return (
+                    <g key={`${band.price}-${index}`}>
+                      <rect x={x} y={y} width={width} height={bandHeight} fill={heatColor(band.intensity)} />
+                      <rect
+                        x={x}
+                        y={y - 8}
+                        width={width}
+                        height={Math.max(18, bandHeight + 16)}
+                        fill="transparent"
+                        className="heat-hit-area"
+                        onMouseEnter={() => setHoveredBand(band)}
+                        onMouseMove={(event) => {
+                          const bounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                          if (bounds) {
+                            setHoveredPoint({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredBand(null);
+                          setHoveredPoint(null);
+                        }}
+                        onClick={() => {
+                          setHoveredBand(band);
+                          setHoveredPoint({ x: x + width / 2, y });
+                        }}
+                      />
+                    </g>
+                  );
                 })}
-                <line x1="0" x2={chartWidth} y1={currentPriceY} y2={currentPriceY} className="current-price-line" />
+                <line x1="0" x2={chartWidth} y1={currentPriceY} y2={currentPriceY} className="current-price-line glow" />
                 {candles.map((candle, index) => {
                   const x = xForIndex(index, candles.length);
                   const open = yForPrice(candle.open, priceMin, priceMax);
@@ -617,12 +706,44 @@ export default function Home() {
                     </g>
                   );
                 })}
-                <rect x={chartWidth - 150} y={currentPriceY - 13} width="112" height="26" rx="3" className="current-price-label-bg" />
-                <text x={chartWidth - 142} y={currentPriceY + 5} className="current-price-label">{priceLabel}</text>
-                <text x={chartWidth - 128} y={chartHeight - 38} className="watermark">coinglass</text>
+                <rect x={chartWidth - 192} y={currentPriceY - 15} width="154" height="30" rx="4" className="current-price-label-bg" />
+                <text x={chartWidth - 182} y={currentPriceY + 5} className="current-price-label">{priceLabel}</text>
+                <text x={chartWidth - 198} y={chartHeight - 38} className="watermark">public OI model</text>
               </svg>
+              {hoveredBand && hoveredPoint ? (
+                <div
+                  className="heat-tooltip"
+                  style={{
+                    left: `${clamp(hoveredPoint.x + 14, 12, chartWidth - 244)}px`,
+                    top: `${clamp(hoveredPoint.y - 18, 12, chartHeight - 164)}px`,
+                  }}
+                >
+                  {(() => {
+                    const detail = describeBand(hoveredBand);
+                    return (
+                      <>
+                        <div className="heat-tooltip-head">
+                          <span>{detail.side.toUpperCase()} ZONE</span>
+                          <strong>{detail.price}</strong>
+                        </div>
+                        <dl>
+                          <div><dt>Strength</dt><dd>{detail.strength}%</dd></div>
+                          <div><dt>Estimate</dt><dd>{detail.estimate}</dd></div>
+                          <div><dt>Confidence</dt><dd>{detail.confidence}</dd></div>
+                          <div><dt>Consumed</dt><dd>{detail.consumed}%</dd></div>
+                          <div><dt>Recent events</dt><dd>{detail.events} / {detail.eventNotional}</dd></div>
+                        </dl>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : null}
               <div className="y-axis">
-                {yTicks.map((tick) => <span key={tick} style={{ top: pct((yForPrice(tick, priceMin, priceMax) / chartHeight) * 100) }}>{tick}</span>)}
+                {yTicks.map((tick) => <span key={tick} style={{ top: pct((yForPrice(tick, priceMin, priceMax) / chartHeight) * 100) }}>{formatPrice(tick, currency, fxUsdJpy, true)}</span>)}
+              </div>
+              <div className="current-price-chip" style={{ top: pct((currentPriceY / chartHeight) * 100) }}>
+                <span>NOW</span>
+                <strong>{currentPriceDetailLabel}</strong>
               </div>
             </div>
             <div className="time-axis">
@@ -681,14 +802,27 @@ export default function Home() {
                 <span className="empty-events">Waiting for relative cluster data.</span>
               ) : (
                 topClusters.map((bucket) => (
-                  <div className={`cluster-item ${(bucket.consumed_score ?? 0) > 0.2 ? "consumed" : ""}`} key={`${bucket.price_bucket}-${bucket.dominant_side}`}>
+                  <div
+                    className={`cluster-item ${(bucket.consumed_score ?? 0) > 0.2 ? "consumed" : ""}`}
+                    key={`${bucket.price_bucket}-${bucket.dominant_side}`}
+                    title={
+                      bucket.recent_liq_event_count
+                        ? `${bucket.recent_liq_event_count} recent liquidation events / ${formatMoneyFromUsd(bucket.recent_liq_notional_usd ?? 0, currency, fxUsdJpy)} consumed near this band`
+                        : undefined
+                    }
+                  >
                     <span className={bucket.dominant_side === "long" ? "long-event" : bucket.dominant_side === "short" ? "short-event" : ""}>
                       {bucket.dominant_side}
                     </span>
-                    <strong>{bucket.price_bucket.toLocaleString("en-US", { maximumFractionDigits: 0 })}</strong>
+                    <strong>{formatPrice(bucket.price_bucket, currency, fxUsdJpy, true)}</strong>
                     <span className="cluster-strength">{Math.round(bucket.relative_intensity * 100)}%</span>
-                    <span className="cluster-estimate">{formatCompactUsd(bucket.estimated_liq_usd)}</span>
-                    {(bucket.consumed_score ?? 0) > 0.2 ? <span className="cluster-consumed">consumed {Math.round(bucket.consumed_score * 100)}%</span> : null}
+                    <span className="cluster-estimate">{formatMoneyFromUsd(bucket.estimated_liq_usd, currency, fxUsdJpy)}</span>
+                    {(bucket.consumed_score ?? 0) > 0.2 ? (
+                      <span className="cluster-consumed">
+                        consumed {Math.round(bucket.consumed_score * 100)}%
+                        {bucket.recent_liq_event_count ? ` / ${bucket.recent_liq_event_count} evt` : ""}
+                      </span>
+                    ) : null}
                     <span className="cluster-meter" aria-hidden="true">
                       <i style={{ width: `${Math.round(bucket.relative_intensity * 100)}%` }} />
                     </span>
@@ -724,8 +858,8 @@ export default function Home() {
                   <div className="liquidation-item" key={`${event.exchange}-${event.ts}-${event.side}-${event.price}`}>
                     <span>{event.exchange}</span>
                     <strong className={event.side.includes("long") ? "long-event" : "short-event"}>{event.side.replace("_liquidated", "")}</strong>
-                    <span>{event.price.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
-                    <span>${event.notional_usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                    <span>{formatPrice(event.price, currency, fxUsdJpy, true)}</span>
+                    <span>{formatMoneyFromUsd(event.notional_usd, currency, fxUsdJpy)}</span>
                   </div>
                 ))
               )}

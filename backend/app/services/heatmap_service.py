@@ -39,6 +39,24 @@ async def get_heatmap(
 
 async def get_live_heatmap(symbol: str, model: int, currency: str, response_range: str, exchanges: list[str] | None = None) -> HeatmapResponse:
     collector_result = await collect_market_data(symbol, exchange_names=exchanges)
+    return build_live_heatmap_from_collector(
+        symbol=symbol,
+        model=model,
+        currency=currency,
+        response_range=response_range,
+        exchanges=exchanges,
+        collector_result=collector_result,
+    )
+
+
+def build_live_heatmap_from_collector(
+    symbol: str,
+    model: int,
+    currency: str,
+    response_range: str,
+    collector_result,
+    exchanges: list[str] | None = None,
+) -> HeatmapResponse:
     if not collector_result.snapshots:
         reference_price, reference_source = _latest_reference_price(symbol)
         fallback = build_mock_heatmap(
@@ -179,6 +197,10 @@ def _history_lookback_ms(response_range: str) -> int:
         return 6 * 60 * 60 * 1000
     if normalized in {"3d", "7d"}:
         return 24 * 60 * 60 * 1000
+    if normalized in {"2w", "14d", "30d", "1m"}:
+        return 7 * 24 * 60 * 60 * 1000
+    if normalized in {"3m", "90d", "6m", "180d", "1y", "2y"}:
+        return 30 * 24 * 60 * 60 * 1000
     return 72 * 60 * 60 * 1000
 
 
@@ -192,12 +214,20 @@ def _delta_lookback_ms(response_range: str) -> int:
         return 3 * 24 * 60 * 60 * 1000
     if normalized == "7d":
         return 7 * 24 * 60 * 60 * 1000
+    if normalized in {"2w", "14d"}:
+        return 14 * 24 * 60 * 60 * 1000
     if normalized == "30d":
         return 30 * 24 * 60 * 60 * 1000
-    if normalized == "180d":
+    if normalized == "1m":
+        return 30 * 24 * 60 * 60 * 1000
+    if normalized in {"3m", "90d"}:
+        return 90 * 24 * 60 * 60 * 1000
+    if normalized in {"6m", "180d"}:
         return 180 * 24 * 60 * 60 * 1000
     if normalized == "1y":
         return 365 * 24 * 60 * 60 * 1000
+    if normalized == "2y":
+        return 2 * 365 * 24 * 60 * 60 * 1000
     return 90 * 24 * 60 * 60 * 1000
 
 

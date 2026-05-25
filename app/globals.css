@@ -423,46 +423,143 @@ h1 {
 }
 
 .watermark {
-  fill: rgba(235, 239, 251, .68);
-  font-size: 21px;
+  fill: rgba(235, 239, 251, .42);
+  font-size: 18px;
   font-weight: 800;
 }
 
 .current-price-line {
-  stroke: rgba(235, 239, 251, .88);
-  stroke-width: 1;
-  stroke-dasharray: 5 5;
+  stroke: rgba(235, 239, 251, .96);
+  stroke-width: 1.4;
+  stroke-dasharray: 6 5;
+}
+
+.current-price-line.glow {
+  filter: drop-shadow(0 0 5px rgba(32, 219, 195, .72));
 }
 
 .current-price-label-bg {
-  fill: rgba(3, 7, 12, .9);
-  stroke: rgba(32, 219, 195, .55);
+  fill: rgba(3, 7, 12, .96);
+  stroke: rgba(32, 219, 195, .82);
 }
 
 .current-price-label {
   fill: #eafefb;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .y-axis {
   position: absolute;
   right: 0;
   top: 0;
-  width: 58px;
+  width: 84px;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(3, 7, 12, .9) 28%, #03070c);
+  background: linear-gradient(90deg, transparent, rgba(3, 7, 12, .92) 18%, #03070c);
   border-left: 1px solid rgba(255, 255, 255, .05);
   pointer-events: none;
 }
 
 .y-axis span {
   position: absolute;
-  right: 7px;
+  right: 8px;
   transform: translateY(-50%);
-  color: #a6afbd;
-  font-size: 12px;
+  color: #b6c1d1;
+  font-size: 11px;
   font-weight: 700;
+}
+
+.current-price-chip {
+  position: absolute;
+  right: 86px;
+  transform: translateY(-50%);
+  z-index: 4;
+  min-width: 154px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid rgba(32, 219, 195, .55);
+  border-radius: 4px;
+  background: rgba(3, 7, 12, .9);
+  box-shadow: 0 0 16px rgba(32, 219, 195, .16);
+  pointer-events: none;
+}
+
+.current-price-chip span {
+  color: var(--cyan);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.current-price-chip strong {
+  color: #eef8ff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.heat-hit-area {
+  cursor: crosshair;
+}
+
+.heat-tooltip {
+  position: absolute;
+  z-index: 8;
+  width: 232px;
+  padding: 10px;
+  border: 1px solid rgba(55, 244, 208, .48);
+  border-radius: 6px;
+  background: rgba(3, 7, 12, .94);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .42), 0 0 20px rgba(32, 219, 195, .12);
+  color: #aebacc;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.heat-tooltip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.heat-tooltip-head span {
+  color: var(--cyan);
+  font-weight: 900;
+}
+
+.heat-tooltip-head strong {
+  color: #f4fbff;
+  font-size: 13px;
+}
+
+.heat-tooltip dl {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+}
+
+.heat-tooltip dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.heat-tooltip dt,
+.heat-tooltip dd {
+  margin: 0;
+}
+
+.heat-tooltip dt {
+  color: #7f8da1;
+}
+
+.heat-tooltip dd {
+  color: #e0e8f4;
+  font-weight: 800;
+  text-align: right;
 }
 
 .time-axis {
@@ -642,6 +739,11 @@ h1 {
   font-size: 9px;
   font-weight: 900;
   text-transform: uppercase;
+  max-width: 148px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stream-status-row {

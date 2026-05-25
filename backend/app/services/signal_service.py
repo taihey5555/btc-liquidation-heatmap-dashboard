@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from app.models.schemas import HeatmapBucket, LiquidationSignalResponse, SignalZone, TopClustersResponse, TopClusterZone
-from app.services.heatmap_service import get_heatmap
+from app.services.collector import collect_market_data
+from app.services.heatmap_service import build_live_heatmap_from_collector, get_heatmap
 
 
 async def get_liquidation_zones_signal(
@@ -78,9 +79,22 @@ async def get_top_clusters_signal(
     current_price = 0.0
     generated_at: int | None = None
     freshness_values: list[int] = []
+    collector_result = None
+    if source == "live":
+        collector_result = await collect_market_data(symbol, exchange_names=exchanges)
 
     for response_range in normalized_ranges:
-        heatmap = await get_heatmap(symbol=symbol, model=model, currency="USD", response_range=response_range, source=source, exchanges=exchanges)
+        if collector_result is not None:
+            heatmap = build_live_heatmap_from_collector(
+                symbol=symbol,
+                model=model,
+                currency="USD",
+                response_range=response_range,
+                collector_result=collector_result,
+                exchanges=exchanges,
+            )
+        else:
+            heatmap = await get_heatmap(symbol=symbol, model=model, currency="USD", response_range=response_range, source=source, exchanges=exchanges)
         current_price = heatmap.current_price or heatmap.last_price_usd or current_price
         generated_at = max(generated_at or 0, heatmap.generated_at or 0) or None
         if heatmap.data_freshness_ms is not None:
@@ -133,6 +147,9 @@ def _zone_from_bucket(bucket: HeatmapBucket, current_price: float, side: str) ->
         consumed_score=bucket.consumed_score,
         total_score=bucket.total_score,
         estimated_liq_usd=bucket.estimated_liq_usd,
+        recent_liq_notional_usd=bucket.recent_liq_notional_usd,
+        recent_liq_event_count=bucket.recent_liq_event_count,
+        last_liq_event_ts=bucket.last_liq_event_ts,
     )
 
 
@@ -149,6 +166,9 @@ def _top_zone_from_bucket(bucket: HeatmapBucket, current_price: float, side: str
         consumed_score=bucket.consumed_score,
         total_score=bucket.total_score,
         estimated_liq_usd=bucket.estimated_liq_usd,
+        recent_liq_notional_usd=bucket.recent_liq_notional_usd,
+        recent_liq_event_count=bucket.recent_liq_event_count,
+        last_liq_event_ts=bucket.last_liq_event_ts,
     )
 
 

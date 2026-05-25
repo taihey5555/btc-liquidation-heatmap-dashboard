@@ -44,7 +44,7 @@ How it works:
 Range behavior:
 - 12h/24h uses tighter buckets and short lookback.
 - 3d/7d uses medium aggregation.
-- 30d/90d/180d/1y uses longer lookback with decay, so old levels do not stay bright forever.
+- 2w/1m/3m/6m/1y/2y uses longer lookback with decay. These ranges are macro context for major liquidity zones and should not be treated as automatic intraday entries.
 
 Fallback behavior:
 - If persisted OI delta buckets are unavailable, Model 2 falls back to recent `market_snapshots`.

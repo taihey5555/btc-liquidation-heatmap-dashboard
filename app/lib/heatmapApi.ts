@@ -42,6 +42,9 @@ export type ApiHeatmapBucket = {
   dominant_side: "long" | "short" | "balanced" | string;
   estimated_liq_usd: number;
   consumed_score: number;
+  recent_liq_notional_usd?: number;
+  recent_liq_event_count?: number;
+  last_liq_event_ts?: number | null;
 };
 
 export type ApiLiquidationEvent = {

@@ -45,6 +45,9 @@ class HeatmapBucket(BaseModel):
     dominant_side: str = "balanced"
     estimated_liq_usd: float = 0
     consumed_score: float = Field(default=0, ge=0, le=1)
+    recent_liq_notional_usd: float = 0
+    recent_liq_event_count: int = 0
+    last_liq_event_ts: int | None = None
 
 
 class HeatmapResponse(BaseModel):
@@ -84,6 +87,9 @@ class SignalZone(BaseModel):
     consumed_score: float = Field(ge=0, le=1)
     total_score: float = Field(ge=0, le=1)
     estimated_liq_usd: float
+    recent_liq_notional_usd: float = 0
+    recent_liq_event_count: int = 0
+    last_liq_event_ts: int | None = None
 
 
 class LiquidationSignalResponse(BaseModel):
@@ -113,6 +119,9 @@ class TopClusterZone(BaseModel):
     consumed_score: float = Field(ge=0, le=1)
     total_score: float = Field(ge=0, le=1)
     estimated_liq_usd: float
+    recent_liq_notional_usd: float = 0
+    recent_liq_event_count: int = 0
+    last_liq_event_ts: int | None = None
 
 
 class TopClustersResponse(BaseModel):
