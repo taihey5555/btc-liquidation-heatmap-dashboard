@@ -3,6 +3,12 @@ export type HeatmapSourceBand = {
   start: number;
   end: number;
   intensity: number;
+  consumedScore?: number;
+};
+
+export type HeatmapCandle = {
+  high: number;
+  low: number;
 };
 
 export type HeatmapCell = {
@@ -40,6 +46,7 @@ function xForIndex(index: number, total: number, width: number) {
 
 export function buildHeatmapCells({
   bands,
+  candles,
   priceMin,
   priceMax,
   width,
@@ -47,6 +54,7 @@ export function buildHeatmapCells({
   indexTotal,
 }: {
   bands: HeatmapSourceBand[];
+  candles: HeatmapCandle[];
   priceMin: number;
   priceMax: number;
   width: number;
@@ -57,11 +65,20 @@ export function buildHeatmapCells({
     return [];
   }
 
+  const priceTolerance = Math.max(((priceMax - priceMin) / height) * 3.2, 18);
+
   return bands.flatMap((band, bandIndex) => {
     if (!Number.isFinite(band.price) || !Number.isFinite(band.intensity)) {
       return [];
     }
 
+    const touchIndex = candles.findIndex((candle, candleIndex) => (
+      candleIndex >= Math.floor(band.start) &&
+      candleIndex <= Math.ceil(band.end) &&
+      candle.low - priceTolerance <= band.price &&
+      candle.high + priceTolerance >= band.price
+    ));
+    const consumedScore = clamp(band.consumedScore ?? 0, 0, 1);
     const x = clamp(xForIndex(band.start, indexTotal, width), 0, width);
     const endX = clamp(xForIndex(band.end, indexTotal, width), 0, width);
     const cellWidth = Math.max(2, endX - x);
@@ -82,15 +99,24 @@ export function buildHeatmapCells({
       const fadeLeft = segment === 0 ? 0.9 : 1;
       const fadeRight = segment === segmentCount - 1 ? 0.82 : 1;
       const layerFade = 1 - Math.abs(offset) * 0.068;
+      const segmentMidIndex = band.start + ((segment + 0.5) / segmentCount) * (band.end - band.start);
+      const touched = touchIndex >= 0 && segmentMidIndex >= touchIndex;
+      const postTouchDistance = touched ? Math.max(0, segmentMidIndex - touchIndex) : 0;
+      const touchFade = touched ? clamp(0.24 - postTouchDistance * 0.018, 0.055, 0.24) : 1;
+      const consumedFade = 1 - consumedScore * (touched ? 0.72 : 0.34);
+      const finalIntensity = clamp(intensity * layerFade * fadeLeft * fadeRight * touchFade * consumedFade, 0.01, 0.92);
+      if (finalIntensity < 0.024) {
+        return null;
+      }
       return {
         x: clamp(segmentX, 0, width),
         y: clamp(y + offset * (rowHeight + 1.35) + stagger * 0.08, 0, height),
         width: Math.max(10, segmentWidth - segmentInset - ((bandIndex + layer) % 12)),
         height: rowHeight,
-        intensity: clamp(intensity * layerFade * fadeLeft * fadeRight, 0.02, 0.92),
+        intensity: finalIntensity,
         drift: stagger / 10,
       };
-    });
+    }).filter((cell): cell is HeatmapCell => cell !== null);
   });
 }
 

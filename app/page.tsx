@@ -378,12 +378,13 @@ export default function Home() {
   }, [apiRelativeHeatBands, isLiveInitialLoading, mockHeatBands, threshold, useApiData]);
   const heatmapCells = useMemo(() => buildHeatmapCells({
     bands: heatBands,
+    candles,
     priceMin,
     priceMax,
     width: chartWidth,
     height: chartHeight,
     indexTotal: 244,
-  }), [heatBands, priceMax, priceMin]);
+  }), [candles, heatBands, priceMax, priceMin]);
   const topZoneLines = useMemo(() => buildTopZoneLines({
     bands: heatBands,
     priceMin,
