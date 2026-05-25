@@ -694,11 +694,11 @@ export default function Home() {
                       x2={chartWidth}
                       y1={zone.y}
                       y2={zone.y}
-                      style={{ opacity: 0.32 + zone.intensity * 0.48 }}
+                      style={{ opacity: 0.12 + zone.intensity * 0.24 }}
                     />
-                    <rect x={chartWidth - 308} y={zone.y - 12} width="102" height="24" rx="4" />
-                    <text x={chartWidth - 298} y={zone.y + 4}>
-                      {Math.round(zone.intensity * 100)}% {zone.dominantSide ? zone.dominantSide.toUpperCase() : "ZONE"}
+                    <rect x={chartWidth - 278} y={zone.y - 9} width="72" height="18" rx="3" />
+                    <text x={chartWidth - 268} y={zone.y + 4}>
+                      {Math.round(zone.intensity * 100)}%
                     </text>
                   </g>
                 ))}

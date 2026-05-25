@@ -10,11 +10,11 @@ type HeatmapCanvasProps = {
 };
 
 function colorStop(intensity: number, alphaScale: number) {
-  if (intensity > 0.86) return `rgba(240, 255, 42, ${0.76 * alphaScale})`;
-  if (intensity > 0.68) return `rgba(115, 232, 64, ${0.58 * alphaScale})`;
-  if (intensity > 0.5) return `rgba(38, 210, 172, ${0.43 * alphaScale})`;
-  if (intensity > 0.32) return `rgba(45, 134, 196, ${0.3 * alphaScale})`;
-  return `rgba(55, 66, 142, ${0.18 * alphaScale})`;
+  if (intensity > 0.86) return `rgba(184, 232, 76, ${0.58 * alphaScale})`;
+  if (intensity > 0.68) return `rgba(62, 197, 118, ${0.46 * alphaScale})`;
+  if (intensity > 0.5) return `rgba(28, 168, 163, ${0.34 * alphaScale})`;
+  if (intensity > 0.32) return `rgba(33, 93, 158, ${0.28 * alphaScale})`;
+  return `rgba(35, 45, 124, ${0.18 * alphaScale})`;
 }
 
 export function HeatmapCanvas({ cells, width, height }: HeatmapCanvasProps) {
@@ -36,9 +36,9 @@ export function HeatmapCanvas({ cells, width, height }: HeatmapCanvasProps) {
     context.clearRect(0, 0, width, height);
 
     const base = context.createLinearGradient(0, 0, width, height);
-    base.addColorStop(0, "#0a1220");
-    base.addColorStop(0.44, "#08111b");
-    base.addColorStop(1, "#04070d");
+    base.addColorStop(0, "#0a1018");
+    base.addColorStop(0.44, "#080d14");
+    base.addColorStop(1, "#04070b");
     context.fillStyle = base;
     context.fillRect(0, 0, width, height);
 
@@ -55,23 +55,23 @@ export function HeatmapCanvas({ cells, width, height }: HeatmapCanvasProps) {
         continue;
       }
 
-      const glowHeight = Math.max(8, cell.height * 3.2);
+      const glowHeight = Math.max(5, cell.height * 2.15);
       const glow = context.createLinearGradient(0, cell.y - glowHeight, 0, cell.y + glowHeight);
       glow.addColorStop(0, "rgba(0, 0, 0, 0)");
-      glow.addColorStop(0.5, colorStop(cell.intensity, 0.36));
+      glow.addColorStop(0.5, colorStop(cell.intensity, 0.28));
       glow.addColorStop(1, "rgba(0, 0, 0, 0)");
       context.fillStyle = glow;
-      context.fillRect(cell.x, cell.y - glowHeight / 2, cell.width, glowHeight);
+      context.fillRect(cell.x + cell.drift * 2, cell.y - glowHeight / 2, cell.width, glowHeight);
 
       context.fillStyle = colorStop(cell.intensity, 1);
-      context.fillRect(cell.x, cell.y - cell.height / 2, cell.width, cell.height);
+      context.fillRect(cell.x, cell.y - cell.height / 2, cell.width, Math.max(1, cell.height));
     }
 
     context.globalCompositeOperation = "source-over";
     const shade = context.createLinearGradient(0, 0, width, 0);
-    shade.addColorStop(0, "rgba(255, 255, 255, .035)");
+    shade.addColorStop(0, "rgba(255, 255, 255, .02)");
     shade.addColorStop(0.58, "rgba(255, 255, 255, 0)");
-    shade.addColorStop(1, "rgba(0, 0, 0, .34)");
+    shade.addColorStop(1, "rgba(0, 0, 0, .42)");
     context.fillStyle = shade;
     context.fillRect(0, 0, width, height);
   }, [cells, height, width]);

@@ -11,6 +11,7 @@ export type HeatmapCell = {
   width: number;
   height: number;
   intensity: number;
+  drift: number;
 };
 
 export type TopZoneLine = {
@@ -66,18 +67,28 @@ export function buildHeatmapCells({
     const cellWidth = Math.max(2, endX - x);
     const y = yForPrice(band.price, priceMin, priceMax, height);
     const intensity = clamp(band.intensity, 0.02, 1);
-    const rowHeight = 2.4 + intensity * 7.8;
-    const layerCount = intensity > 0.78 ? 5 : intensity > 0.52 ? 4 : 3;
+    const rowHeight = 1.15 + intensity * 2.2;
+    const layerCount = intensity > 0.76 ? 11 : intensity > 0.54 ? 9 : 7;
+    const segmentCount = Math.max(2, Math.min(9, Math.ceil(cellWidth / 118)));
+    const segmentWidth = cellWidth / segmentCount;
 
-    return Array.from({ length: layerCount }, (_, layer) => {
+    return Array.from({ length: layerCount * segmentCount }, (_, cellIndex) => {
+      const layer = Math.floor(cellIndex / segmentCount);
+      const segment = cellIndex % segmentCount;
       const offset = layer - (layerCount - 1) / 2;
-      const widthInset = layer * 2.8 + (bandIndex % 4) * 0.6;
+      const stagger = ((bandIndex * 17 + layer * 11 + segment * 7) % 21) - 10;
+      const segmentInset = segment === 0 ? 0 : (bandIndex + layer + segment) % 10;
+      const segmentX = x + segment * segmentWidth + segmentInset;
+      const fadeLeft = segment === 0 ? 0.9 : 1;
+      const fadeRight = segment === segmentCount - 1 ? 0.82 : 1;
+      const layerFade = 1 - Math.abs(offset) * 0.068;
       return {
-        x: clamp(x + widthInset, 0, width),
-        y: clamp(y + offset * rowHeight * 0.58, 0, height),
-        width: Math.max(2, cellWidth - widthInset * 2),
-        height: rowHeight * (1 - layer * 0.08),
-        intensity: clamp(intensity * (1 - Math.abs(offset) * 0.13), 0.02, 1),
+        x: clamp(segmentX, 0, width),
+        y: clamp(y + offset * (rowHeight + 1.35) + stagger * 0.08, 0, height),
+        width: Math.max(10, segmentWidth - segmentInset - ((bandIndex + layer) % 12)),
+        height: rowHeight,
+        intensity: clamp(intensity * layerFade * fadeLeft * fadeRight, 0.02, 0.92),
+        drift: stagger / 10,
       };
     });
   });
