@@ -16,6 +16,8 @@ import {
   type ApiObservationRun,
   type HeatmapResponse,
 } from "./lib/heatmapApi";
+import { HeatmapCanvas } from "./components/HeatmapCanvas";
+import { buildHeatmapCells, buildTopZoneLines } from "./lib/heatmapViewModel";
 
 type Candle = {
   time: string;
@@ -220,14 +222,6 @@ function buildProfile(): ProfileRow[] {
   });
 }
 
-function heatColor(intensity: number) {
-  if (intensity > 0.9) return "rgba(246, 255, 0, .92)";
-  if (intensity > 0.72) return "rgba(99, 226, 55, .72)";
-  if (intensity > 0.52) return "rgba(36, 210, 178, .56)";
-  if (intensity > 0.36) return "rgba(46, 142, 190, .36)";
-  return "rgba(72, 90, 156, .2)";
-}
-
 function formatExchangeWeights(weights: HeatmapResponse["exchange_weights"]) {
   const enabledWeights = weights.filter((weight) => weight.enabled && weight.weight > 0);
   if (enabledWeights.length === 0) {
@@ -382,6 +376,22 @@ export default function Home() {
     const sourceBands = useApiData ? apiRelativeHeatBands : mockHeatBands;
     return sourceBands.filter((band) => band.intensity * 100 >= threshold);
   }, [apiRelativeHeatBands, isLiveInitialLoading, mockHeatBands, threshold, useApiData]);
+  const heatmapCells = useMemo(() => buildHeatmapCells({
+    bands: heatBands,
+    priceMin,
+    priceMax,
+    width: chartWidth,
+    height: chartHeight,
+    indexTotal: 244,
+  }), [heatBands, priceMax, priceMin]);
+  const topZoneLines = useMemo(() => buildTopZoneLines({
+    bands: heatBands,
+    priceMin,
+    priceMax,
+    width: chartWidth,
+    height: chartHeight,
+    limit: 5,
+  }), [heatBands, priceMax, priceMin]);
   const profile = useApiData ? activeLiveData.profile : useMockData ? mockProfile : [];
   const last = candles[candles.length - 1].close;
   const currentPriceY = yForPrice(last, priceMin, priceMax);
@@ -636,21 +646,8 @@ export default function Home() {
                   <span>Live public endpoints timed out. Mock fallback is for layout and relative-signal preview.</span>
                 </div>
               ) : null}
+              <HeatmapCanvas cells={heatmapCells} width={chartWidth} height={chartHeight} />
               <svg className="main-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="BTCUSDT liquidation heatmap chart">
-                <defs>
-                  <linearGradient id="chartBase" x1="0" x2="1">
-                    <stop offset="0%" stopColor="#320643" />
-                    <stop offset="45%" stopColor="#3b064e" />
-                    <stop offset="100%" stopColor="#160d2c" />
-                  </linearGradient>
-                  <linearGradient id="chartShade" x1="0" x2="1">
-                    <stop offset="0%" stopColor="rgba(255,255,255,.04)" />
-                    <stop offset="58%" stopColor="rgba(255,255,255,0)" />
-                    <stop offset="100%" stopColor="rgba(0,0,0,.22)" />
-                  </linearGradient>
-                </defs>
-                <rect width={chartWidth} height={chartHeight} fill="url(#chartBase)" />
-                <rect width={chartWidth} height={chartHeight} fill="url(#chartShade)" />
                 {yTicks.map((tick) => (
                   <line key={tick} x1="0" x2={chartWidth} y1={yForPrice(tick, priceMin, priceMax)} y2={yForPrice(tick, priceMin, priceMax)} className="grid-line" />
                 ))}
@@ -664,7 +661,6 @@ export default function Home() {
                   const width = xForIndex(band.end, 244) - x;
                   return (
                     <g key={`${band.price}-${index}`}>
-                      <rect x={x} y={y} width={width} height={bandHeight} fill={heatColor(band.intensity)} />
                       <rect
                         x={x}
                         y={y - 8}
@@ -691,6 +687,21 @@ export default function Home() {
                     </g>
                   );
                 })}
+                {topZoneLines.map((zone) => (
+                  <g key={zone.key} className="top-zone-line">
+                    <line
+                      x1="0"
+                      x2={chartWidth}
+                      y1={zone.y}
+                      y2={zone.y}
+                      style={{ opacity: 0.32 + zone.intensity * 0.48 }}
+                    />
+                    <rect x={chartWidth - 308} y={zone.y - 12} width="102" height="24" rx="4" />
+                    <text x={chartWidth - 298} y={zone.y + 4}>
+                      {Math.round(zone.intensity * 100)}% {zone.dominantSide ? zone.dominantSide.toUpperCase() : "ZONE"}
+                    </text>
+                  </g>
+                ))}
                 <line x1="0" x2={chartWidth} y1={currentPriceY} y2={currentPriceY} className="current-price-line glow" />
                 {candles.map((candle, index) => {
                   const x = xForIndex(index, candles.length);
