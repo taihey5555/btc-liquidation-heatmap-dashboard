@@ -314,28 +314,52 @@ function uniqueMessages(messages: string[]) {
   });
 }
 
-function buildProfileCurvePath(
+function profileTotalUsd(row: ProfileRow) {
+  return row.total_liq_usd && row.total_liq_usd > 0 ? row.total_liq_usd : row.long + row.short;
+}
+
+function profileNetUsd(row: ProfileRow) {
+  return row.net_liq_usd ?? row.long - row.short;
+}
+
+function profileSideUsd(row: ProfileRow, side: "long" | "short") {
+  if (row.total_liq_usd && row.total_liq_usd > 0) {
+    const total = profileTotalUsd(row);
+    const net = profileNetUsd(row);
+    return side === "long" ? Math.max(0, (total + net) / 2) : Math.max(0, (total - net) / 2);
+  }
+  return Math.max(0, row[side]);
+}
+
+function buildDirectionalProfileCurvePath(
   rows: ProfileRow[],
   side: "long" | "short",
+  currentPrice: number,
   priceMin: number,
   priceMax: number,
 ) {
   if (rows.length === 0) {
     return "";
   }
-  const leftX = side === "long" ? 152 : 132;
-  const scale = side === "long" ? 76 : 68;
+  const relevantRows = rows
+    .filter((row) => side === "short" ? row.price >= currentPrice : row.price <= currentPrice)
+    .sort((a, b) => side === "short" ? a.price - b.price : b.price - a.price);
+  if (relevantRows.length === 0) {
+    return "";
+  }
+  const baseX = 132;
+  const scale = side === "short" ? 86 : 78;
   let running = 0;
-  const cumulativeKey = side === "long" ? "cumulative_long" : "cumulative_short";
-  const maxCumulative = Math.max(...rows.map((row) => row[cumulativeKey] ?? 0), 0);
-  const total = maxCumulative || rows.reduce((sum, row) => sum + row[side], 0) || 1;
-  return rows
+  const values = relevantRows.map((row) => {
+    running += profileSideUsd(row, side);
+    return { row, running };
+  });
+  const total = values.at(-1)?.running || 1;
+  return values
     .map((row, index) => {
-      running += row[side];
-      const value = row[cumulativeKey] && row[cumulativeKey] > 0 ? row[cumulativeKey] : running;
-      const normalized = Math.sqrt(value / total);
-      const x = leftX + normalized * scale;
-      const y = yForPrice(row.price, priceMin, priceMax);
+      const normalized = Math.sqrt(row.running / total);
+      const x = baseX + normalized * scale;
+      const y = yForPrice(row.row.price, priceMin, priceMax);
       return `${index === 0 ? "M" : "L"} ${roundChart(x)} ${roundChart(y)}`;
     })
     .join(" ");
@@ -451,17 +475,17 @@ export default function Home() {
     () => profile.filter((row) => row.price >= priceMin && row.price <= priceMax).sort((a, b) => a.price - b.price),
     [priceMax, priceMin, profile],
   );
-  const profileMax = useMemo(() => Math.max(...visibleProfile.map((row) => row.total_liq_usd && row.total_liq_usd > 0 ? row.total_liq_usd : row.long + row.short), 1), [visibleProfile]);
-  const longProfilePath = useMemo(
-    () => buildProfileCurvePath(visibleProfile, "long", priceMin, priceMax),
-    [priceMax, priceMin, visibleProfile],
-  );
-  const shortProfilePath = useMemo(
-    () => buildProfileCurvePath(visibleProfile, "short", priceMin, priceMax),
-    [priceMax, priceMin, visibleProfile],
-  );
+  const profileMax = useMemo(() => Math.max(...visibleProfile.map(profileTotalUsd), 1), [visibleProfile]);
   const last = candles[candles.length - 1].close;
   const currentPriceY = yForPrice(last, priceMin, priceMax);
+  const longProfilePath = useMemo(
+    () => buildDirectionalProfileCurvePath(visibleProfile, "long", last, priceMin, priceMax),
+    [last, priceMax, priceMin, visibleProfile],
+  );
+  const shortProfilePath = useMemo(
+    () => buildDirectionalProfileCurvePath(visibleProfile, "short", last, priceMin, priceMax),
+    [last, priceMax, priceMin, visibleProfile],
+  );
   const fx = 157;
   const fxUsdJpy = activeLiveData?.fx_usd_jpy ?? apiData?.fx_usd_jpy ?? fx;
   const priceLabel = isLiveInitialLoading
@@ -833,18 +857,21 @@ export default function Home() {
                 {yTicks.map((tick) => (
                   <line key={tick} x1="0" x2="236" y1={yForPrice(tick, priceMin, priceMax)} y2={yForPrice(tick, priceMin, priceMax)} className="profile-grid-line" />
                 ))}
-                <line x1="118" x2="118" y1="0" y2={chartHeight} className="profile-midline-svg" />
+                <line x1="8" x2="8" y1="0" y2={chartHeight} className="profile-origin-line-svg" />
                 {visibleProfile.map((row, index) => {
                   const y = yForPrice(row.price, priceMin, priceMax);
-                  const total = row.total_liq_usd && row.total_liq_usd > 0 ? row.total_liq_usd : row.long + row.short;
-                  const net = row.net_liq_usd ?? row.long - row.short;
-                  const width = clamp((total / profileMax) * 204, 2, 210);
+                  const total = profileTotalUsd(row);
+                  const net = profileNetUsd(row);
+                  const longUsd = profileSideUsd(row, "long");
+                  const shortUsd = profileSideUsd(row, "short");
+                  const width = clamp((total / profileMax) * 210, 2, 218);
                   const strength = clamp(total / profileMax, 0.08, 1);
-                  const sideClass = net >= 0 ? "long" : "short";
+                  const sideClass = row.price >= last ? "short" : "long";
+                  const heatClass = strength > 0.72 ? "hot" : strength > 0.42 ? "warm" : "cool";
                   return (
                     <g key={`${row.price}-${index}`} opacity={roundChart(0.24 + strength * 0.72, 3)}>
-                      <title>{`${formatPrice(row.price, currency, fxUsdJpy)} total ${formatMoneyFromUsd(total, currency, fxUsdJpy)} / net ${formatMoneyFromUsd(Math.abs(net), currency, fxUsdJpy)} ${net >= 0 ? "long" : "short"}`}</title>
-                      <rect className={`profile-total-bar ${sideClass}`} x="10" y={y - 1.3} width={width} height="2.6" />
+                      <title>{`${formatPrice(row.price, currency, fxUsdJpy)} total ${formatMoneyFromUsd(total, currency, fxUsdJpy)} / long ${formatMoneyFromUsd(longUsd, currency, fxUsdJpy)} / short ${formatMoneyFromUsd(shortUsd, currency, fxUsdJpy)} / net ${formatMoneyFromUsd(Math.abs(net), currency, fxUsdJpy)} ${net >= 0 ? "long" : "short"}`}</title>
+                      <rect className={`profile-total-bar ${sideClass} ${heatClass}`} x="8" y={y - 1.4} width={width} height="2.8" />
                     </g>
                   );
                 })}

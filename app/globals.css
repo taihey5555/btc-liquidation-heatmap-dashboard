@@ -624,7 +624,7 @@ h1 {
   height: 100%;
   overflow: hidden;
   background:
-    linear-gradient(90deg, rgba(255, 45, 111, .1), transparent 48%, rgba(17, 125, 118, .12)),
+    linear-gradient(90deg, rgba(255, 45, 111, .12), rgba(16, 41, 59, .18) 48%, rgba(17, 125, 118, .13)),
     #02070b;
 }
 
@@ -640,24 +640,37 @@ h1 {
 }
 
 .profile-grid-line.vertical {
-  stroke: rgba(255, 255, 255, .08);
+  stroke: rgba(255, 255, 255, .055);
 }
 
-.profile-midline-svg {
-  stroke: rgba(255, 255, 255, .1);
+.profile-origin-line-svg {
+  stroke: rgba(255, 255, 255, .14);
   stroke-width: 1;
 }
 
 .profile-total-bar {
-  filter: drop-shadow(0 0 4px rgba(32, 219, 195, .12));
+  filter: drop-shadow(0 0 5px rgba(32, 219, 195, .14));
 }
 
-.profile-total-bar.long {
-  fill: rgba(32, 219, 195, .68);
+.profile-total-bar.cool {
+  fill: rgba(44, 105, 210, .66);
 }
 
-.profile-total-bar.short {
-  fill: rgba(255, 55, 108, .62);
+.profile-total-bar.warm {
+  fill: rgba(28, 204, 190, .8);
+}
+
+.profile-total-bar.hot {
+  fill: rgba(222, 247, 33, .92);
+  filter: drop-shadow(0 0 7px rgba(222, 247, 33, .28));
+}
+
+.profile-total-bar.long.cool {
+  fill: rgba(28, 151, 164, .52);
+}
+
+.profile-total-bar.short.cool {
+  fill: rgba(51, 103, 218, .62);
 }
 
 .profile-cumulative {
@@ -668,11 +681,11 @@ h1 {
 }
 
 .profile-cumulative.long {
-  stroke: rgba(116, 223, 107, .88);
+  stroke: rgba(103, 212, 98, .9);
 }
 
 .profile-cumulative.short {
-  stroke: rgba(255, 76, 103, .84);
+  stroke: rgba(255, 55, 108, .88);
 }
 
 .profile-current-line-svg {
