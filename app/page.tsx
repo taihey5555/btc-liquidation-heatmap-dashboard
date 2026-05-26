@@ -54,6 +54,8 @@ const showMockToggle = process.env.NEXT_PUBLIC_SHOW_MOCK_TOGGLE === "true";
 const defaultPriceMin = 75000;
 const defaultPriceMax = 81950;
 const chartWidth = 1100;
+const priceAxisWidth = 86;
+const chartPlotWidth = chartWidth - priceAxisWidth;
 const chartHeight = 590;
 const bottomHeight = 108;
 const rangeTickLabels: Record<string, string[]> = {
@@ -92,8 +94,8 @@ function yForPrice(price: number, min = defaultPriceMin, max = defaultPriceMax) 
   return roundChart(chartHeight - ((price - min) / (max - min)) * chartHeight);
 }
 
-function xForIndex(index: number, total: number) {
-  return roundChart((index / Math.max(1, total - 1)) * chartWidth);
+function xForIndex(index: number, total: number, width = chartPlotWidth) {
+  return roundChart((index / Math.max(1, total - 1)) * width);
 }
 
 function rangeProfile(range: string) {
@@ -381,7 +383,7 @@ export default function Home() {
     candles,
     priceMin,
     priceMax,
-    width: chartWidth,
+    width: chartPlotWidth,
     height: chartHeight,
     indexTotal: 244,
   }), [candles, heatBands, priceMax, priceMin]);
@@ -389,7 +391,7 @@ export default function Home() {
     bands: heatBands,
     priceMin,
     priceMax,
-    width: chartWidth,
+    width: chartPlotWidth,
     height: chartHeight,
     limit: 5,
   }), [heatBands, priceMax, priceMin]);
@@ -403,7 +405,6 @@ export default function Home() {
     : useApiData
     ? formatPrice(activeLiveData.last_price_usd, currency, fxUsdJpy)
     : formatPrice(last, currency, fxUsdJpy);
-  const currentPriceDetailLabel = isLiveInitialLoading ? "waiting for live price" : `${formatPrice(last, currency, fxUsdJpy)} BTCUSDT`;
   const dataStatusLabel = dataMode === "mock" ? "mock" : apiStatus === "idle" ? "live loading" : apiStatus === "ready" ? (apiData?.fallback ? "fallback mock" : "live") : "mock fallback";
   const generatedAtLabel = apiData?.generated_at ? new Date(apiData.generated_at * 1000).toLocaleTimeString("ja-JP", { hour12: false }) : "-";
   const refreshLabel = lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString("ja-JP", { hour12: false }) : "-";
@@ -647,13 +648,13 @@ export default function Home() {
                   <span>Live public endpoints timed out. Mock fallback is for layout and relative-signal preview.</span>
                 </div>
               ) : null}
-              <HeatmapCanvas cells={heatmapCells} width={chartWidth} height={chartHeight} />
+              <HeatmapCanvas cells={heatmapCells} width={chartPlotWidth} height={chartHeight} />
               <svg className="main-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="BTCUSDT liquidation heatmap chart">
                 {yTicks.map((tick) => (
-                  <line key={tick} x1="0" x2={chartWidth} y1={yForPrice(tick, priceMin, priceMax)} y2={yForPrice(tick, priceMin, priceMax)} className="grid-line" />
+                  <line key={tick} x1="0" x2={chartPlotWidth} y1={yForPrice(tick, priceMin, priceMax)} y2={yForPrice(tick, priceMin, priceMax)} className="grid-line" />
                 ))}
                 {Array.from({ length: 14 }, (_, index) => (
-                  <line key={index} x1={(index / 13) * chartWidth} x2={(index / 13) * chartWidth} y1="0" y2={chartHeight} className="grid-line vertical" />
+                  <line key={index} x1={(index / 13) * chartPlotWidth} x2={(index / 13) * chartPlotWidth} y1="0" y2={chartHeight} className="grid-line vertical" />
                 ))}
                 {heatBands.map((band, index) => {
                   const x = xForIndex(band.start, 244);
@@ -692,18 +693,18 @@ export default function Home() {
                   <g key={zone.key} className="top-zone-line">
                     <line
                       x1="0"
-                      x2={chartWidth}
+                      x2={chartPlotWidth}
                       y1={zone.y}
                       y2={zone.y}
                       style={{ opacity: 0.12 + zone.intensity * 0.24 }}
                     />
-                    <rect x={chartWidth - 278} y={zone.y - 9} width="72" height="18" rx="3" />
-                    <text x={chartWidth - 268} y={zone.y + 4}>
+                    <rect x={chartPlotWidth - 88} y={zone.y - 9} width="72" height="18" rx="3" />
+                    <text x={chartPlotWidth - 78} y={zone.y + 4}>
                       {Math.round(zone.intensity * 100)}%
                     </text>
                   </g>
                 ))}
-                <line x1="0" x2={chartWidth} y1={currentPriceY} y2={currentPriceY} className="current-price-line glow" />
+                <line x1="0" x2={chartPlotWidth} y1={currentPriceY} y2={currentPriceY} className="current-price-line glow" />
                 {candles.map((candle, index) => {
                   const x = xForIndex(index, candles.length);
                   const open = yForPrice(candle.open, priceMin, priceMax);
@@ -723,7 +724,7 @@ export default function Home() {
                 <div
                   className="heat-tooltip"
                   style={{
-                    left: `${clamp(hoveredPoint.x + 14, 12, chartWidth - 244)}px`,
+                    left: `${clamp(hoveredPoint.x + 14, 12, chartPlotWidth - 244)}px`,
                     top: `${clamp(hoveredPoint.y - 18, 12, chartHeight - 164)}px`,
                   }}
                 >
@@ -751,8 +752,7 @@ export default function Home() {
                 {yTicks.map((tick) => <span key={tick} style={{ top: pct((yForPrice(tick, priceMin, priceMax) / chartHeight) * 100) }}>{formatPrice(tick, currency, fxUsdJpy, true)}</span>)}
               </div>
               <div className="current-price-chip" style={{ top: pct((currentPriceY / chartHeight) * 100) }}>
-                <span>NOW</span>
-                <strong>{currentPriceDetailLabel}</strong>
+                <strong>{priceLabel}</strong>
               </div>
             </div>
             <div className="time-axis">
@@ -792,13 +792,13 @@ export default function Home() {
             </div>
             <svg viewBox={`0 0 ${chartWidth} ${bottomHeight}`} className="net-chart" role="img" aria-label="Accumulated longs shorts chart">
               <path
-                d={candles.map((candle, index) => `${index === 0 ? "M" : "L"} ${xForIndex(index, candles.length)} ${roundChart(82 - seededNoise(index + 11) * 18 - (candle.close - 78000) / 70)}`).join(" ")}
+                d={candles.map((candle, index) => `${index === 0 ? "M" : "L"} ${xForIndex(index, candles.length, chartWidth)} ${roundChart(82 - seededNoise(index + 11) * 18 - (candle.close - 78000) / 70)}`).join(" ")}
                 fill="none"
                 stroke="#87a8ef"
                 strokeWidth="1.4"
               />
               <path
-                d={`${candles.map((candle, index) => `${index === 0 ? "M" : "L"} ${xForIndex(index, candles.length)} ${roundChart(82 - seededNoise(index + 11) * 18 - (candle.close - 78000) / 70)}`).join(" ")} L ${chartWidth} ${bottomHeight} L 0 ${bottomHeight} Z`}
+                d={`${candles.map((candle, index) => `${index === 0 ? "M" : "L"} ${xForIndex(index, candles.length, chartWidth)} ${roundChart(82 - seededNoise(index + 11) * 18 - (candle.close - 78000) / 70)}`).join(" ")} L ${chartWidth} ${bottomHeight} L 0 ${bottomHeight} Z`}
                 fill="rgba(77, 111, 178, .35)"
               />
             </svg>
