@@ -298,6 +298,30 @@ function uniqueMessages(messages: string[]) {
   });
 }
 
+function buildProfileCurvePath(
+  rows: ProfileRow[],
+  side: "long" | "short",
+  priceMin: number,
+  priceMax: number,
+) {
+  if (rows.length === 0) {
+    return "";
+  }
+  const midX = 118;
+  const scale = 104;
+  let running = 0;
+  const total = rows.reduce((sum, row) => sum + row[side], 0) || 1;
+  return rows
+    .map((row, index) => {
+      running += row[side];
+      const normalized = Math.sqrt(running / total);
+      const x = side === "long" ? midX + normalized * scale : midX - normalized * scale;
+      const y = yForPrice(row.price, priceMin, priceMax);
+      return `${index === 0 ? "M" : "L"} ${roundChart(x)} ${roundChart(y)}`;
+    })
+    .join(" ");
+}
+
 export default function Home() {
   const [model, setModel] = useState(1);
   const [range, setRange] = useState("90D");
@@ -395,7 +419,28 @@ export default function Home() {
     height: chartHeight,
     limit: 5,
   }), [heatBands, priceMax, priceMin]);
-  const profile = useApiData ? activeLiveData.profile : useMockData ? mockProfile : [];
+  const profile = useMemo(() => {
+    if (useApiData) {
+      return activeLiveData.profile;
+    }
+    if (useMockData) {
+      return mockProfile;
+    }
+    return [];
+  }, [activeLiveData, mockProfile, useApiData, useMockData]);
+  const visibleProfile = useMemo(
+    () => profile.filter((row) => row.price >= priceMin && row.price <= priceMax).sort((a, b) => a.price - b.price),
+    [priceMax, priceMin, profile],
+  );
+  const profileMax = useMemo(() => Math.max(...visibleProfile.map((row) => Math.max(row.long, row.short)), 1), [visibleProfile]);
+  const longProfilePath = useMemo(
+    () => buildProfileCurvePath(visibleProfile, "long", priceMin, priceMax),
+    [priceMax, priceMin, visibleProfile],
+  );
+  const shortProfilePath = useMemo(
+    () => buildProfileCurvePath(visibleProfile, "short", priceMin, priceMax),
+    [priceMax, priceMin, visibleProfile],
+  );
   const last = candles[candles.length - 1].close;
   const currentPriceY = yForPrice(last, priceMin, priceMax);
   const fx = 157;
@@ -762,26 +807,31 @@ export default function Home() {
 
           <aside className="profile-panel">
             <div className="profile-grid">
-              {profile.filter((row) => row.price >= priceMin && row.price <= priceMax).map((row) => {
-                const profileStrength = clamp(Math.max(row.long / 112, row.short / 98), 0.04, 1);
-                return (
-                <div
-                  className="profile-row"
-                  key={row.price}
-                  style={{
-                    top: pct(100 - ((row.price - priceMin) / (priceMax - priceMin)) * 100),
-                    opacity: roundChart(0.18 + profileStrength * 0.82, 3),
-                  }}
-                >
-                  <span className="profile-short" style={{ width: pct(row.short) }} />
-                  <span className="profile-long" style={{ width: pct(row.long) }} />
-                </div>
-                );
-              })}
-              <div className="profile-midline" />
-              <div className="profile-current-line" style={{ top: pct((currentPriceY / chartHeight) * 100) }} />
-              <div className="profile-curve long-curve" />
-              <div className="profile-curve short-curve" />
+              <svg className="profile-chart" viewBox={`0 0 236 ${chartHeight}`} role="img" aria-label="Long short liquidation profile by price">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <line key={index} x1={(index / 4) * 236} x2={(index / 4) * 236} y1="0" y2={chartHeight} className="profile-grid-line vertical" />
+                ))}
+                {yTicks.map((tick) => (
+                  <line key={tick} x1="0" x2="236" y1={yForPrice(tick, priceMin, priceMax)} y2={yForPrice(tick, priceMin, priceMax)} className="profile-grid-line" />
+                ))}
+                <line x1="118" x2="118" y1="0" y2={chartHeight} className="profile-midline-svg" />
+                {visibleProfile.map((row, index) => {
+                  const y = yForPrice(row.price, priceMin, priceMax);
+                  const shortWidth = clamp((row.short / profileMax) * 106, 2, 108);
+                  const longWidth = clamp((row.long / profileMax) * 106, 2, 108);
+                  const strength = clamp(Math.max(row.long, row.short) / profileMax, 0.08, 1);
+                  return (
+                    <g key={`${row.price}-${index}`} opacity={roundChart(0.24 + strength * 0.72, 3)}>
+                      <title>{`${formatPrice(row.price, currency, fxUsdJpy)} long ${Math.round(row.long)} / short ${Math.round(row.short)}`}</title>
+                      <rect className="profile-short-bar" x={118 - shortWidth} y={y - 1.2} width={shortWidth} height="2.4" />
+                      <rect className="profile-long-bar" x="118" y={y - 1.2} width={longWidth} height="2.4" />
+                    </g>
+                  );
+                })}
+                {shortProfilePath ? <path className="profile-cumulative short" d={shortProfilePath} /> : null}
+                {longProfilePath ? <path className="profile-cumulative long" d={longProfilePath} /> : null}
+                <line x1="0" x2="236" y1={currentPriceY} y2={currentPriceY} className="profile-current-line-svg" />
+              </svg>
             </div>
           </aside>
 

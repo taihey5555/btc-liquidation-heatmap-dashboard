@@ -624,69 +624,59 @@ h1 {
   height: 100%;
   overflow: hidden;
   background:
-    repeating-linear-gradient(90deg, transparent 0, transparent 58px, rgba(255, 255, 255, .1) 59px, transparent 60px),
-    linear-gradient(90deg, rgba(255, 45, 111, .11), transparent 45%, rgba(17, 125, 118, .11));
+    linear-gradient(90deg, rgba(255, 45, 111, .1), transparent 48%, rgba(17, 125, 118, .12)),
+    #02070b;
 }
 
-.profile-row {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-}
-
-.profile-short,
-.profile-long {
-  position: absolute;
-  right: 50%;
-  height: 2px;
-  background: rgba(47, 119, 221, .72);
-}
-
-.profile-long {
-  left: 50%;
-  right: auto;
-  background: rgba(32, 219, 195, .78);
-}
-
-.profile-midline {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 1px;
+.profile-chart {
+  display: block;
+  width: 100%;
   height: 100%;
-  border-left: 1px dashed rgba(255, 255, 255, .16);
 }
 
-.profile-current-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: rgba(235, 239, 251, .82);
-  box-shadow: 0 0 8px rgba(235, 239, 251, .3);
+.profile-grid-line {
+  stroke: rgba(255, 255, 255, .06);
+  stroke-width: 1;
 }
 
-.profile-curve {
-  position: absolute;
-  left: 47%;
-  width: 38%;
-  border-left: 1.5px solid rgba(32, 219, 195, .88);
-  border-radius: 42% 58% 46% 54%;
+.profile-grid-line.vertical {
+  stroke: rgba(255, 255, 255, .08);
 }
 
-.long-curve {
-  top: 1%;
-  height: 43%;
-  transform: skewY(-18deg);
+.profile-midline-svg {
+  stroke: rgba(255, 255, 255, .2);
+  stroke-dasharray: 5 5;
+  stroke-width: 1;
 }
 
-.short-curve {
-  bottom: 0;
-  height: 39%;
-  border-color: var(--pink);
-  transform: skewY(18deg);
-  background: linear-gradient(90deg, rgba(255, 45, 111, .12), transparent);
+.profile-short-bar {
+  fill: rgba(255, 55, 108, .68);
+}
+
+.profile-long-bar {
+  fill: rgba(32, 219, 195, .72);
+}
+
+.profile-cumulative {
+  fill: none;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 5px rgba(32, 219, 195, .22));
+}
+
+.profile-cumulative.long {
+  stroke: rgba(116, 223, 107, .9);
+}
+
+.profile-cumulative.short {
+  stroke: rgba(255, 76, 103, .86);
+}
+
+.profile-current-line-svg {
+  stroke: rgba(235, 239, 251, .82);
+  stroke-width: 1;
+  stroke-dasharray: 7 5;
+  filter: drop-shadow(0 0 5px rgba(235, 239, 251, .28));
 }
 
 .bottom-panel {
