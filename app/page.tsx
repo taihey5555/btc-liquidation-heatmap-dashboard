@@ -720,7 +720,6 @@ export default function Home() {
                 })}
                 <rect x={chartWidth - 192} y={currentPriceY - 15} width="154" height="30" rx="4" className="current-price-label-bg" />
                 <text x={chartWidth - 182} y={currentPriceY + 5} className="current-price-label">{priceLabel}</text>
-                <text x={chartWidth - 198} y={chartHeight - 38} className="watermark">public OI model</text>
               </svg>
               {hoveredBand && hoveredPoint ? (
                 <div
