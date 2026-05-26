@@ -17,6 +17,10 @@ export type ApiProfileRow = {
   price: number;
   long: number;
   short: number;
+  total_liq_usd?: number;
+  net_liq_usd?: number;
+  cumulative_long?: number;
+  cumulative_short?: number;
 };
 
 export type ApiNetPoint = {

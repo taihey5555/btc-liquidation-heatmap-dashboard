@@ -45,6 +45,10 @@ type ProfileRow = {
   price: number;
   long: number;
   short: number;
+  total_liq_usd?: number;
+  net_liq_usd?: number;
+  cumulative_long?: number;
+  cumulative_short?: number;
 };
 
 type DataMode = "mock" | "live";
@@ -212,14 +216,26 @@ function buildRelativeBandsFromBuckets(buckets: HeatmapResponse["buckets"]): Hea
 }
 
 function buildProfile(): ProfileRow[] {
+  let cumulativeLong = 0;
+  let cumulativeShort = 0;
   return Array.from({ length: 84 }, (_, index) => {
     const price = defaultPriceMin + (index / 83) * (defaultPriceMax - defaultPriceMin);
     const hot = Math.exp(-Math.pow((price - 77500) / 330, 2)) * 0.95 + Math.exp(-Math.pow((price - 79000) / 520, 2)) * 0.7;
     const upper = Math.exp(-Math.pow((price - 79900) / 390, 2)) * 0.55;
+    const long = clamp((hot + Math.max(0, seededNoise(index + 20)) * 0.28) * 100, 2, 112);
+    const short = clamp((upper + Math.max(0, seededNoise(index + 4)) * 0.35) * 100, 2, 98);
+    const longLiqUsd = long * 22_000_000;
+    const shortLiqUsd = short * 22_000_000;
+    cumulativeLong += longLiqUsd;
+    cumulativeShort += shortLiqUsd;
     return {
       price,
-      long: clamp((hot + Math.max(0, seededNoise(index + 20)) * 0.28) * 100, 2, 112),
-      short: clamp((upper + Math.max(0, seededNoise(index + 4)) * 0.35) * 100, 2, 98),
+      long,
+      short,
+      total_liq_usd: longLiqUsd + shortLiqUsd,
+      net_liq_usd: longLiqUsd - shortLiqUsd,
+      cumulative_long: cumulativeLong,
+      cumulative_short: cumulativeShort,
     };
   });
 }
@@ -307,15 +323,18 @@ function buildProfileCurvePath(
   if (rows.length === 0) {
     return "";
   }
-  const midX = 118;
-  const scale = 104;
+  const leftX = side === "long" ? 152 : 132;
+  const scale = side === "long" ? 76 : 68;
   let running = 0;
-  const total = rows.reduce((sum, row) => sum + row[side], 0) || 1;
+  const cumulativeKey = side === "long" ? "cumulative_long" : "cumulative_short";
+  const maxCumulative = Math.max(...rows.map((row) => row[cumulativeKey] ?? 0), 0);
+  const total = maxCumulative || rows.reduce((sum, row) => sum + row[side], 0) || 1;
   return rows
     .map((row, index) => {
       running += row[side];
-      const normalized = Math.sqrt(running / total);
-      const x = side === "long" ? midX + normalized * scale : midX - normalized * scale;
+      const value = row[cumulativeKey] && row[cumulativeKey] > 0 ? row[cumulativeKey] : running;
+      const normalized = Math.sqrt(value / total);
+      const x = leftX + normalized * scale;
       const y = yForPrice(row.price, priceMin, priceMax);
       return `${index === 0 ? "M" : "L"} ${roundChart(x)} ${roundChart(y)}`;
     })
@@ -432,7 +451,7 @@ export default function Home() {
     () => profile.filter((row) => row.price >= priceMin && row.price <= priceMax).sort((a, b) => a.price - b.price),
     [priceMax, priceMin, profile],
   );
-  const profileMax = useMemo(() => Math.max(...visibleProfile.map((row) => Math.max(row.long, row.short)), 1), [visibleProfile]);
+  const profileMax = useMemo(() => Math.max(...visibleProfile.map((row) => row.total_liq_usd && row.total_liq_usd > 0 ? row.total_liq_usd : row.long + row.short), 1), [visibleProfile]);
   const longProfilePath = useMemo(
     () => buildProfileCurvePath(visibleProfile, "long", priceMin, priceMax),
     [priceMax, priceMin, visibleProfile],
@@ -817,14 +836,15 @@ export default function Home() {
                 <line x1="118" x2="118" y1="0" y2={chartHeight} className="profile-midline-svg" />
                 {visibleProfile.map((row, index) => {
                   const y = yForPrice(row.price, priceMin, priceMax);
-                  const shortWidth = clamp((row.short / profileMax) * 106, 2, 108);
-                  const longWidth = clamp((row.long / profileMax) * 106, 2, 108);
-                  const strength = clamp(Math.max(row.long, row.short) / profileMax, 0.08, 1);
+                  const total = row.total_liq_usd && row.total_liq_usd > 0 ? row.total_liq_usd : row.long + row.short;
+                  const net = row.net_liq_usd ?? row.long - row.short;
+                  const width = clamp((total / profileMax) * 204, 2, 210);
+                  const strength = clamp(total / profileMax, 0.08, 1);
+                  const sideClass = net >= 0 ? "long" : "short";
                   return (
                     <g key={`${row.price}-${index}`} opacity={roundChart(0.24 + strength * 0.72, 3)}>
-                      <title>{`${formatPrice(row.price, currency, fxUsdJpy)} long ${Math.round(row.long)} / short ${Math.round(row.short)}`}</title>
-                      <rect className="profile-short-bar" x={118 - shortWidth} y={y - 1.2} width={shortWidth} height="2.4" />
-                      <rect className="profile-long-bar" x="118" y={y - 1.2} width={longWidth} height="2.4" />
+                      <title>{`${formatPrice(row.price, currency, fxUsdJpy)} total ${formatMoneyFromUsd(total, currency, fxUsdJpy)} / net ${formatMoneyFromUsd(Math.abs(net), currency, fxUsdJpy)} ${net >= 0 ? "long" : "short"}`}</title>
+                      <rect className={`profile-total-bar ${sideClass}`} x="10" y={y - 1.3} width={width} height="2.6" />
                     </g>
                   );
                 })}

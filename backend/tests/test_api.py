@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 
@@ -25,6 +26,10 @@ def test_heatmap_response_shape() -> None:
     assert len(data["heat_bands"]) > 0
     assert len(data["profile"]) == 84
     assert len(data["buckets"]) == 72
+    profile_row = data["profile"][0]
+    assert {"price", "long", "short", "total_liq_usd", "net_liq_usd", "cumulative_long", "cumulative_short"} <= set(profile_row)
+    assert profile_row["total_liq_usd"] == pytest.approx((profile_row["long"] + profile_row["short"]) * 22_000_000)
+    assert profile_row["net_liq_usd"] == pytest.approx((profile_row["long"] - profile_row["short"]) * 22_000_000)
 
 
 def test_exchanges_status() -> None:

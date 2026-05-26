@@ -101,15 +101,27 @@ def build_heat_bands(model: int, threshold: int = 0, reference_price: float | No
 def build_profile(reference_price: float | None = None) -> list[ProfileRow]:
     offset = (reference_price - 78_350) if reference_price and reference_price > 0 else 0.0
     profile: list[ProfileRow] = []
+    cumulative_long = 0.0
+    cumulative_short = 0.0
     for index in range(84):
         price = PRICE_MIN + (index / 83) * (PRICE_MAX - PRICE_MIN) + offset
         hot = math.exp(-((price - 77500) / 330) ** 2) * 0.95 + math.exp(-((price - 79000) / 520) ** 2) * 0.7
         upper = math.exp(-((price - 79900) / 390) ** 2) * 0.55
+        long = clamp((hot + max(0, seeded_noise(index + 20)) * 0.28) * 100, 2, 112)
+        short = clamp((upper + max(0, seeded_noise(index + 4)) * 0.35) * 100, 2, 98)
+        long_liq_usd = long * 22_000_000
+        short_liq_usd = short * 22_000_000
+        cumulative_long += long_liq_usd
+        cumulative_short += short_liq_usd
         profile.append(
             ProfileRow(
                 price=price,
-                long=clamp((hot + max(0, seeded_noise(index + 20)) * 0.28) * 100, 2, 112),
-                short=clamp((upper + max(0, seeded_noise(index + 4)) * 0.35) * 100, 2, 98),
+                long=long,
+                short=short,
+                total_liq_usd=long_liq_usd + short_liq_usd,
+                net_liq_usd=long_liq_usd - short_liq_usd,
+                cumulative_long=cumulative_long,
+                cumulative_short=cumulative_short,
             )
         )
     return profile

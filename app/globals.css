@@ -644,17 +644,20 @@ h1 {
 }
 
 .profile-midline-svg {
-  stroke: rgba(255, 255, 255, .2);
-  stroke-dasharray: 5 5;
+  stroke: rgba(255, 255, 255, .1);
   stroke-width: 1;
 }
 
-.profile-short-bar {
-  fill: rgba(255, 55, 108, .68);
+.profile-total-bar {
+  filter: drop-shadow(0 0 4px rgba(32, 219, 195, .12));
 }
 
-.profile-long-bar {
-  fill: rgba(32, 219, 195, .72);
+.profile-total-bar.long {
+  fill: rgba(32, 219, 195, .68);
+}
+
+.profile-total-bar.short {
+  fill: rgba(255, 55, 108, .62);
 }
 
 .profile-cumulative {
@@ -665,11 +668,11 @@ h1 {
 }
 
 .profile-cumulative.long {
-  stroke: rgba(116, 223, 107, .9);
+  stroke: rgba(116, 223, 107, .88);
 }
 
 .profile-cumulative.short {
-  stroke: rgba(255, 76, 103, .86);
+  stroke: rgba(255, 76, 103, .84);
 }
 
 .profile-current-line-svg {

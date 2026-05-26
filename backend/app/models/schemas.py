@@ -20,6 +20,10 @@ class ProfileRow(BaseModel):
     price: float
     long: float
     short: float
+    total_liq_usd: float = 0
+    net_liq_usd: float = 0
+    cumulative_long: float = 0
+    cumulative_short: float = 0
 
 
 class NetPoint(BaseModel):

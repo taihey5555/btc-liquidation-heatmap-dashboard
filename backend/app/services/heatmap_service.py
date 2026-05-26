@@ -333,15 +333,25 @@ def _buckets_to_profile(buckets: list[HeatmapBucket]) -> list[ProfileRow]:
     lower = min_price - span * 0.05
     upper = max_price + span * 0.05
     profile: list[ProfileRow] = []
+    cumulative_long = 0.0
+    cumulative_short = 0.0
     for index in range(96):
         price = lower + (index / 95) * (upper - lower)
         nearest = min(bucket_map, key=lambda bucket_price: abs(bucket_price - price))
         bucket = bucket_map[nearest]
+        long_liq_usd = bucket.long_liq_usd
+        short_liq_usd = bucket.short_liq_usd
+        cumulative_long += long_liq_usd
+        cumulative_short += short_liq_usd
         profile.append(
             ProfileRow(
                 price=price,
-                long=clamp((bucket.long_liq_usd / max_long) ** 1.35 * 112, 0.4, 112),
-                short=clamp((bucket.short_liq_usd / max_short) ** 1.35 * 98, 0.4, 98),
+                long=clamp((long_liq_usd / max_long) ** 1.35 * 112, 0.4, 112),
+                short=clamp((short_liq_usd / max_short) ** 1.35 * 98, 0.4, 98),
+                total_liq_usd=long_liq_usd + short_liq_usd,
+                net_liq_usd=long_liq_usd - short_liq_usd,
+                cumulative_long=cumulative_long,
+                cumulative_short=cumulative_short,
             )
         )
     return profile
