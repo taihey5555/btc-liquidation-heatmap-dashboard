@@ -160,7 +160,7 @@ h1 {
   width: 1434px;
   min-width: 1434px;
   display: grid;
-  grid-template-columns: 1fr .72fr .72fr .72fr 1.75fr .85fr;
+  grid-template-columns: 1fr .72fr .72fr .62fr 1.35fr .82fr .72fr;
   gap: 1px;
   margin: 10px 0;
   border: 1px solid var(--line);

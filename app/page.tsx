@@ -9,12 +9,14 @@ import {
   fetchObservationAnomalies,
   fetchObservationRuns,
   fetchRecentLiquidations,
+  fetchXSentimentSummary,
   type ApiExchangeStatus,
   type ApiLiquidationEvent,
   type ApiObservationAnomaly,
   type ApiObservationReport,
   type ApiObservationRun,
   type HeatmapResponse,
+  type XSentimentSummary,
 } from "./lib/heatmapApi";
 import { HeatmapCanvas } from "./components/HeatmapCanvas";
 import { buildHeatmapCells, buildTopZoneLines } from "./lib/heatmapViewModel";
@@ -382,6 +384,8 @@ export default function Home() {
   const [observationRun, setObservationRun] = useState<ApiObservationRun | null>(null);
   const [observationReport, setObservationReport] = useState<ApiObservationReport | null>(null);
   const [observationAnomalies, setObservationAnomalies] = useState<ApiObservationAnomaly[]>([]);
+  const [xSentiment, setXSentiment] = useState<XSentimentSummary | null>(null);
+  const [xSentimentStatus, setXSentimentStatus] = useState<"idle" | "ready" | "unavailable">("idle");
   const [hoveredBand, setHoveredBand] = useState<HeatBand | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number } | null>(null);
   const enabledExchangeKey = enabledExchanges.join(",");
@@ -508,6 +512,13 @@ export default function Home() {
     : isLiveInitialLoading
       ? "loading live weights"
       : "mock blend";
+  const xSentimentLabel = xSentimentStatus === "ready" && xSentiment
+    ? `${Math.round(xSentiment.euphoria_index)} / ${xSentiment.level}`
+    : "Unavailable";
+  const xSentimentTerms = xSentiment?.top_terms.slice(0, 4).join(" / ") || "-";
+  const xSentimentGenerated = xSentiment?.generated_at
+    ? new Date(xSentiment.generated_at).toLocaleTimeString("ja-JP", { hour12: false })
+    : "-";
   const toggleExchange = (exchange: string) => {
     setEnabledExchanges((current) => {
       if (current.includes(exchange)) {
@@ -631,6 +642,32 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadXSentiment = () => {
+      fetchXSentimentSummary("btc", 24)
+        .then((summary) => {
+          if (!cancelled) {
+            setXSentiment(summary);
+            setXSentimentStatus(summary ? "ready" : "unavailable");
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setXSentiment(null);
+            setXSentimentStatus("unavailable");
+          }
+        });
+    };
+
+    loadXSentiment();
+    const refreshId = window.setInterval(loadXSentiment, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshId);
+    };
+  }, []);
+
   return (
     <main className="terminal-shell">
       {isMockVisual ? <div className="fallback-badge">Fallback: Styled Mock View</div> : null}
@@ -676,6 +713,10 @@ export default function Home() {
           <strong>{exchangeWeights}</strong>
         </div>
         <div>
+          <span>X Euphoria</span>
+          <strong>{xSentimentLabel}</strong>
+        </div>
+        <div>
           <span>Public Data</span>
           <strong>Estimated</strong>
         </div>
@@ -692,6 +733,15 @@ export default function Home() {
         <span>freshness {apiData?.data_freshness_ms ?? "-"}ms</span>
         <span>price source {currentPriceSource}</span>
         <span>used {(apiData?.exchanges_used ?? []).join(",") || "-"}</span>
+        <span>X sentiment {xSentimentStatus}</span>
+        {xSentiment ? (
+          <>
+            <span>tweets {xSentiment.tweet_count} / spam {xSentiment.spam_filtered}</span>
+            <span>retail hype {Math.round(xSentiment.retail_hype_ratio * 100)}%</span>
+            <span>terms {xSentimentTerms}</span>
+            <span>X generated {xSentimentGenerated}</span>
+          </>
+        ) : null}
         {apiError ? <strong className="status-error">{apiError}</strong> : null}
         {visibleWarnings.length > 0 ? <strong className="status-warning">{visibleWarnings.join(" / ")}</strong> : null}
       </section>

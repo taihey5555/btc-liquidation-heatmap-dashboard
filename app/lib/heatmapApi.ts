@@ -140,6 +140,39 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_HEATMAP_API_BASE ??
   "http://127.0.0.1:8000";
 
+export type XSentimentSummary = {
+  asset: string;
+  language: string;
+  hours: number;
+  euphoria_index: number;
+  pessimism_index: number;
+  bullish_ratio: number;
+  bearish_ratio: number;
+  panic_ratio: number;
+  retail_hype_ratio: number;
+  tweet_count: number;
+  spam_filtered: number;
+  level: "overheated" | "hot" | "neutral" | "cool" | string;
+  top_terms: string[];
+  generated_at: number;
+};
+
+export const X_SENTIMENT_API_BASE = process.env.NEXT_PUBLIC_X_SENTIMENT_API_BASE ?? "";
+
+export async function fetchXSentimentSummary(asset = "btc", hours = 24): Promise<XSentimentSummary | null> {
+  if (!X_SENTIMENT_API_BASE) {
+    return null;
+  }
+  const searchParams = new URLSearchParams({ asset, hours: String(hours) });
+  const response = await fetch(`${X_SENTIMENT_API_BASE}/api/v1/sentiment/summary?${searchParams.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`X sentiment API failed with ${response.status}`);
+  }
+  return response.json() as Promise<XSentimentSummary>;
+}
+
 export async function fetchHeatmap(params: {
   symbol: string;
   model: number;
